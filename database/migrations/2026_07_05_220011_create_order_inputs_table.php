@@ -19,6 +19,12 @@ return new class extends Migration
             $table->text('value_text')->nullable();
             $table->boolean('value_bool')->nullable();
 
+            // Denormalised from the input's type (maintained by OrderInput::booted):
+            // true when the input bears a scalar answer (text/boolean), false
+            // otherwise. Copied onto the row because the CHECK below can only see
+            // columns of its own row, and the deciding type lives on service_inputs.
+            $table->boolean('expects_scalar')->default(false);
+
             // MySQL 8 stored generated column: counts how many scalar slots are
             // populated for this answer. Driven purely from same-row columns.
             $table->unsignedTinyInteger('value_fill_count')
@@ -29,14 +35,15 @@ return new class extends Migration
             $table->unique(['order_id', 'input_id']);
         });
 
-        // CHECK backed by the generated column: a scalar answer may never carry
-        // both a text and a boolean value at once. The complementary lower bound
-        // ("exactly one when the input type requires a scalar") is enforced in
-        // the application layer, because the deciding input type lives on
-        // service_inputs and a CHECK can only see columns of its own row.
+        // CHECK backed by the generated column: a value-bearing input must carry
+        // EXACTLY ONE scalar value (value_fill_count = 1), and a non-value-bearing
+        // input must carry NONE (value_fill_count = 0). Since expects_scalar is
+        // 0/1, requiring value_fill_count = expects_scalar rejects both-null and
+        // both-set answers for value-bearing inputs at the database layer.
         DB::statement(
             'ALTER TABLE order_inputs '
-            .'ADD CONSTRAINT chk_order_inputs_single_scalar CHECK (value_fill_count <= 1)'
+            .'ADD CONSTRAINT chk_order_inputs_exactly_one_scalar '
+            .'CHECK (value_fill_count = expects_scalar)'
         );
     }
 

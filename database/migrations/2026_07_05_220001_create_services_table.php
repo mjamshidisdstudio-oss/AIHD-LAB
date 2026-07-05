@@ -37,7 +37,8 @@ return new class extends Migration
             // list/detail pages avoid aggregate queries.
             $table->unsignedInteger('vote_up')->default(0);
             $table->unsignedInteger('vote_down')->default(0);
-            $table->unsignedInteger('avg_latency_ms')->default(0);
+            // Nullable: unknown until the service has completed an order.
+            $table->unsignedInteger('avg_latency_ms')->nullable();
             $table->unsignedInteger('trending_rank')->nullable()->index();
 
             $table->timestamps();

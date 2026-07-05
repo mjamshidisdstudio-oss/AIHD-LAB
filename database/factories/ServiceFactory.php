@@ -33,7 +33,7 @@ class ServiceFactory extends Factory
             'current_version_id' => null,
             'vote_up' => 0,
             'vote_down' => 0,
-            'avg_latency_ms' => 0,
+            'avg_latency_ms' => null,
             'trending_rank' => null,
         ];
     }

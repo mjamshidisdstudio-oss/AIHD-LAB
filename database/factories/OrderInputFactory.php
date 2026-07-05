@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\ServiceInputType;
 use App\Models\Order;
 use App\Models\OrderInput;
 use App\Models\ServiceInput;
@@ -34,11 +35,14 @@ class OrderInputFactory extends Factory
     }
 
     /**
-     * Non-scalar answer (options / files carry the value instead).
+     * Non-value-bearing answer: its value lives in the options / files tables,
+     * so both scalar columns stay null. Pointed at a select input so the row
+     * satisfies the "zero scalars for non-value-bearing inputs" CHECK.
      */
     public function empty(): static
     {
         return $this->state(fn () => [
+            'input_id' => ServiceInput::factory()->ofType(ServiceInputType::Select),
             'value_text' => null,
             'value_bool' => null,
         ]);

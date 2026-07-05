@@ -17,6 +17,7 @@ class OrderInput extends Model
 
     /**
      * value_fill_count is a stored generated column and must never be written.
+     * expects_scalar is derived from the input type in booted(), not mass-assigned.
      */
     protected $fillable = [
         'order_id',
@@ -29,8 +30,32 @@ class OrderInput extends Model
     {
         return [
             'value_bool' => 'boolean',
+            'expects_scalar' => 'boolean',
             'value_fill_count' => 'integer',
         ];
+    }
+
+    /**
+     * Keep expects_scalar in lockstep with the input's type so the database
+     * CHECK (value_fill_count = expects_scalar) can enforce "exactly one scalar
+     * value for value-bearing inputs, none for the rest" — the app cannot set
+     * the discriminator inconsistently with the actual input.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (OrderInput $orderInput): void {
+            if ($orderInput->input_id === null) {
+                return;
+            }
+
+            $input = $orderInput->relationLoaded('input')
+                ? $orderInput->getRelation('input')
+                : ServiceInput::query()->find($orderInput->input_id);
+
+            if ($input instanceof ServiceInput) {
+                $orderInput->expects_scalar = $input->type->isScalar();
+            }
+        });
     }
 
     /**
