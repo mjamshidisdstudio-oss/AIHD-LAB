@@ -21,6 +21,7 @@ class FileFactory extends Factory
 
         return [
             'kind' => $kind,
+            'disk' => 'media',
             'order_id' => Order::factory(),
             'mime' => 'image/png',
             'path' => $kind->value.'/'.Str::uuid().'.png',

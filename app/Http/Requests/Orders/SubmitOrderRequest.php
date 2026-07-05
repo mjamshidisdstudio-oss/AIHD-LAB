@@ -1,0 +1,33 @@
+<?php
+
+namespace App\Http\Requests\Orders;
+
+use App\Enums\EntryMode;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+
+class SubmitOrderRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function rules(): array
+    {
+        return [
+            'service_id' => ['required', 'uuid', 'exists:services,id'],
+            'entry_mode' => ['sometimes', Rule::enum(EntryMode::class)],
+            // Scalar / select answers keyed by input slug. Per-input requirements
+            // (which inputs are mandatory) are enforced by SubmitOrder against the
+            // published version.
+            'answers' => ['sometimes', 'array'],
+            // File answers keyed by input slug (image/video inputs).
+            'files' => ['sometimes', 'array'],
+            'files.*' => ['file', 'max:10240'],
+        ];
+    }
+}

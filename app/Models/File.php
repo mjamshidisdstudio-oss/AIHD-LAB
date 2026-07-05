@@ -17,6 +17,7 @@ class File extends Model
 
     protected $fillable = [
         'kind',
+        'disk',
         'order_id',
         'mime',
         'path',
