@@ -1,8 +1,10 @@
 <?php
 
+use App\Exceptions\Catalog\CatalogException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,5 +18,12 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->statefulApi();
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Surface catalog/versioning domain rule violations as JSON for the API.
+        $exceptions->render(function (CatalogException $e, Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => $e->getMessage()], $e->status);
+            }
+
+            return null;
+        });
     })->create();

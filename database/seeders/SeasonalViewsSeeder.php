@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Catalog\PublishVersion;
 use App\Enums\ServiceInputType;
 use App\Enums\ServiceKind;
 use App\Enums\ServiceOutputType;
@@ -43,10 +44,12 @@ class SeasonalViewsSeeder extends Seeder
                 ],
             );
 
+            // Build the version as a draft so its inputs/options can be added
+            // (published versions are frozen), then publish it at the end.
             $version = ServiceVersion::firstOrCreate(
                 ['service_id' => $service->id, 'version_no' => 1],
                 [
-                    'status' => ServiceVersionStatus::Published,
+                    'status' => ServiceVersionStatus::Draft,
                     'coin_cost' => 2,
                     'regenerate_limit' => 3,
                     'response_timeout_s' => 120,
@@ -54,12 +57,9 @@ class SeasonalViewsSeeder extends Seeder
                     'max_get_attempts' => 10,
                     'post_url' => 'https://api.example.test/season-gen/generate',
                     'get_url' => 'https://api.example.test/season-gen/result',
-                    'published_at' => now(),
+                    'published_at' => null,
                 ],
             );
-
-            // Point the service at its published version.
-            $service->update(['current_version_id' => $version->id]);
 
             // 1) room_photo — required image upload.
             $roomPhoto = ServiceInput::firstOrCreate(
@@ -165,6 +165,12 @@ class SeasonalViewsSeeder extends Seeder
                     ['service_version_id' => $version->id, 'sort_order' => $i + 1],
                     ['text' => $text],
                 );
+            }
+
+            // Publish the fully-built draft: sets published + published_at,
+            // points the service's current_version_id at it, resets failures.
+            if ($version->isDraft()) {
+                app(PublishVersion::class)->handle($version);
             }
         });
     }

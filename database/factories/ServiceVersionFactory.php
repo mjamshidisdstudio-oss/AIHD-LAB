@@ -19,7 +19,8 @@ class ServiceVersionFactory extends Factory
         return [
             'service_id' => Service::factory(),
             'version_no' => $this->faker->unique()->numberBetween(1, 1_000_000),
-            'status' => ServiceVersionStatus::Published,
+            // Versions start life as drafts; publishing is an explicit action.
+            'status' => ServiceVersionStatus::Draft,
             'coin_cost' => $this->faker->numberBetween(0, 10),
             'regenerate_limit' => $this->faker->numberBetween(0, 5),
             'response_timeout_s' => 120,
@@ -27,7 +28,7 @@ class ServiceVersionFactory extends Factory
             'max_get_attempts' => 10,
             'post_url' => $this->faker->url(),
             'get_url' => $this->faker->url(),
-            'published_at' => now(),
+            'published_at' => null,
         ];
     }
 
@@ -36,6 +37,14 @@ class ServiceVersionFactory extends Factory
         return $this->state(fn () => [
             'status' => ServiceVersionStatus::Draft,
             'published_at' => null,
+        ]);
+    }
+
+    public function published(): static
+    {
+        return $this->state(fn () => [
+            'status' => ServiceVersionStatus::Published,
+            'published_at' => now(),
         ]);
     }
 

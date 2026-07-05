@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ServiceVersionStatus;
+use App\Exceptions\Catalog\VersionNotEditableException;
 use Database\Factories\ServiceVersionFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -41,6 +42,33 @@ class ServiceVersion extends Model
             'max_get_attempts' => 'integer',
             'published_at' => 'datetime',
         ];
+    }
+
+    public function isDraft(): bool
+    {
+        return $this->status === ServiceVersionStatus::Draft;
+    }
+
+    public function isPublished(): bool
+    {
+        return $this->status === ServiceVersionStatus::Published;
+    }
+
+    public function isRetired(): bool
+    {
+        return $this->status === ServiceVersionStatus::Retired;
+    }
+
+    /**
+     * Guard used before mutating this version's content.
+     *
+     * @throws VersionNotEditableException
+     */
+    public function ensureEditable(): void
+    {
+        if (! $this->isDraft()) {
+            throw VersionNotEditableException::for($this);
+        }
     }
 
     /**

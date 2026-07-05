@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ServiceOutputType;
+use App\Models\Concerns\GuardsVersionEditable;
 use Database\Factories\ServiceOutputFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -12,7 +13,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class ServiceOutput extends Model
 {
     /** @use HasFactory<ServiceOutputFactory> */
-    use HasFactory, HasUuids;
+    use GuardsVersionEditable, HasFactory, HasUuids;
+
+    protected function resolveOwningVersion(): ?ServiceVersion
+    {
+        return $this->version;
+    }
 
     protected $fillable = [
         'service_version_id',
