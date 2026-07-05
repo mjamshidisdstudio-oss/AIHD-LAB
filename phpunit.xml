@@ -23,6 +23,7 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
+        <env name="REDIS_CLIENT" value="predis"/>
         <!-- Tests run against a dedicated MySQL 8 database because the schema
              relies on MySQL-only features (generated columns, CHECK, composite
              and enum columns) that SQLite cannot reproduce. -->
