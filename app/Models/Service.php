@@ -1,0 +1,110 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\ServiceKind;
+use App\Enums\ServiceStatus;
+use Database\Factories\ServiceFactory;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Service extends Model
+{
+    /** @use HasFactory<ServiceFactory> */
+    use HasFactory, HasUuids;
+
+    protected $fillable = [
+        'slug',
+        'name',
+        'description',
+        'image_url',
+        'kind',
+        'external_url',
+        'category',
+        'service_secret',
+        'status',
+        'consecutive_failures',
+        'current_version_id',
+        'vote_up',
+        'vote_down',
+        'avg_latency_ms',
+        'trending_rank',
+    ];
+
+    protected $hidden = [
+        'service_secret',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'kind' => ServiceKind::class,
+            'status' => ServiceStatus::class,
+            'service_secret' => 'hashed',
+            'consecutive_failures' => 'integer',
+            'vote_up' => 'integer',
+            'vote_down' => 'integer',
+            'avg_latency_ms' => 'integer',
+            'trending_rank' => 'integer',
+        ];
+    }
+
+    /**
+     * @return BelongsTo<ServiceVersion, $this>
+     */
+    public function currentVersion(): BelongsTo
+    {
+        return $this->belongsTo(ServiceVersion::class, 'current_version_id');
+    }
+
+    /**
+     * @return HasMany<ServiceVersion, $this>
+     */
+    public function versions(): HasMany
+    {
+        return $this->hasMany(ServiceVersion::class);
+    }
+
+    /**
+     * @return HasMany<Order, $this>
+     */
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class);
+    }
+
+    /**
+     * @return HasMany<ServiceVote, $this>
+     */
+    public function votes(): HasMany
+    {
+        return $this->hasMany(ServiceVote::class);
+    }
+
+    /**
+     * @return HasMany<Bookmark, $this>
+     */
+    public function bookmarks(): HasMany
+    {
+        return $this->hasMany(Bookmark::class);
+    }
+
+    /**
+     * @return HasMany<Interaction, $this>
+     */
+    public function interactions(): HasMany
+    {
+        return $this->hasMany(Interaction::class);
+    }
+
+    /**
+     * @return HasMany<WebhookDelivery, $this>
+     */
+    public function webhookDeliveries(): HasMany
+    {
+        return $this->hasMany(WebhookDelivery::class);
+    }
+}
