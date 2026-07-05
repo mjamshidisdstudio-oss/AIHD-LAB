@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\GuardsVersionEditable;
 use Database\Factories\OptionDependencyFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -11,7 +12,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class OptionDependency extends Model
 {
     /** @use HasFactory<OptionDependencyFactory> */
-    use HasFactory, HasUuids;
+    use GuardsVersionEditable, HasFactory, HasUuids;
+
+    protected function resolveOwningVersion(): ?ServiceVersion
+    {
+        return $this->option?->input?->version;
+    }
 
     protected $fillable = [
         'option_id',
