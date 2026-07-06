@@ -44,7 +44,7 @@ class Service extends Model
         return [
             'kind' => ServiceKind::class,
             'status' => ServiceStatus::class,
-            'service_secret' => 'hashed',
+            'service_secret' => 'encrypted',
             'consecutive_failures' => 'integer',
             'max_concurrent' => 'integer',
             'vote_up' => 'integer',
@@ -52,6 +52,33 @@ class Service extends Model
             'avg_latency_ms' => 'integer',
             'trending_rank' => 'integer',
         ];
+    }
+
+    /**
+     * Verify an inbound webhook's HMAC signature against the RAW request body.
+     * The signature is compared in constant time to avoid timing attacks.
+     */
+    public function verifyWebhookSignature(string $rawBody, ?string $signature): bool
+    {
+        if ($signature === null || $signature === '' || $this->service_secret === null) {
+            return false;
+        }
+
+        $expected = hash_hmac('sha256', $rawBody, $this->service_secret);
+
+        return hash_equals($expected, $signature);
+    }
+
+    /**
+     * Constant-time check of a presented service key (storage API Bearer).
+     */
+    public function verifyServiceKey(?string $presented): bool
+    {
+        if ($presented === null || $presented === '' || $this->service_secret === null) {
+            return false;
+        }
+
+        return hash_equals((string) $this->service_secret, $presented);
     }
 
     /**

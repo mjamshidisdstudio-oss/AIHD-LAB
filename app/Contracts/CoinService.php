@@ -23,6 +23,12 @@ interface CoinService
     public function charge(string $userRef, int $amount, string $idempotencyKey): string;
 
     /**
+     * Settle (capture) a previously charged transaction when its order
+     * completes. Idempotent: settling twice captures once.
+     */
+    public function settle(string $transactionRef): void;
+
+    /**
      * Refund a previous charge by its transaction reference. Idempotent.
      */
     public function refund(string $transactionRef): void;

@@ -22,9 +22,22 @@ class MockCoinService implements CoinService
         );
     }
 
+    public function settle(string $transactionRef): void
+    {
+        Cache::forever("mock-coins:settle:{$transactionRef}", true);
+    }
+
     public function refund(string $transactionRef): void
     {
         Cache::forever("mock-coins:refund:{$transactionRef}", true);
+    }
+
+    /**
+     * Test helper: was this transaction settled?
+     */
+    public function wasSettled(string $transactionRef): bool
+    {
+        return (bool) Cache::get("mock-coins:settle:{$transactionRef}", false);
     }
 
     /**
