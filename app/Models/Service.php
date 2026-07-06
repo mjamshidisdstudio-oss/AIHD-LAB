@@ -110,6 +110,36 @@ class Service extends Model
     }
 
     /**
+     * Verify an inbound webhook's HMAC signature against the RAW request body.
+     * Signed with webhook_signing_key — the RETRIEVABLE secret — never
+     * service_secret, which is bcrypt-hashed and can never yield the raw value
+     * HMAC needs. Compared in constant time to avoid timing attacks.
+     */
+    public function verifyWebhookSignature(string $rawBody, ?string $signature): bool
+    {
+        if ($signature === null || $signature === '' || $this->webhook_signing_key === null) {
+            return false;
+        }
+
+        $expected = hash_hmac('sha256', $rawBody, $this->webhook_signing_key);
+
+        return hash_equals($expected, $signature);
+    }
+
+    /**
+     * Constant-time check of a presented service key (storage API Bearer).
+     * Also checked against webhook_signing_key, for the same reason.
+     */
+    public function verifyServiceKey(?string $presented): bool
+    {
+        if ($presented === null || $presented === '' || $this->webhook_signing_key === null) {
+            return false;
+        }
+
+        return hash_equals((string) $this->webhook_signing_key, $presented);
+    }
+
+    /**
      * @return BelongsTo<ServiceVersion, $this>
      */
     public function currentVersion(): BelongsTo
