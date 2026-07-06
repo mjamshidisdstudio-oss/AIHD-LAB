@@ -61,21 +61,24 @@ return [
         ],
 
         /*
-        | S3-compatible object storage used for all user-facing media
-        | (input uploads and generated results). Kept as its own disk so the
-        | bucket/credentials can differ from the generic "s3" disk and so the
-        | application always references media by the "media" name.
+        | Object storage used for all user-facing media (input uploads and
+        | generated results). The application always references it by the
+        | "media" name; the underlying driver is swappable via MEDIA_DRIVER —
+        | a local disk during early development, S3 in production (Phase 5),
+        | which is a single env change. The s3 keys below are simply ignored
+        | while the driver is "local".
         */
         'media' => [
-            'driver' => 's3',
+            'driver' => env('MEDIA_DRIVER', 'local'),
+            'root' => storage_path('app/media'),
+            'url' => env('MEDIA_URL'),
+            'visibility' => env('MEDIA_VISIBILITY', 'private'),
             'key' => env('MEDIA_ACCESS_KEY_ID'),
             'secret' => env('MEDIA_SECRET_ACCESS_KEY'),
             'region' => env('MEDIA_DEFAULT_REGION', 'us-east-1'),
             'bucket' => env('MEDIA_BUCKET'),
-            'url' => env('MEDIA_URL'),
             'endpoint' => env('MEDIA_ENDPOINT'),
             'use_path_style_endpoint' => env('MEDIA_USE_PATH_STYLE_ENDPOINT', true),
-            'visibility' => env('MEDIA_VISIBILITY', 'private'),
             'throw' => false,
             'report' => false,
         ],

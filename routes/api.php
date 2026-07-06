@@ -4,11 +4,26 @@ use App\Http\Controllers\Admin\Catalog\InputController;
 use App\Http\Controllers\Admin\Catalog\OptionController;
 use App\Http\Controllers\Admin\Catalog\ServiceController;
 use App\Http\Controllers\Admin\Catalog\VersionController;
+use App\Http\Controllers\OrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
+});
+
+/*
+|--------------------------------------------------------------------------
+| Orders (site)
+|--------------------------------------------------------------------------
+|
+| Submit an order and read its status/results. Reads are answered entirely
+| from our database — never from the external service.
+|
+*/
+Route::middleware('auth:sanctum')->group(function () {
+    Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+    Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
 });
 
 /*

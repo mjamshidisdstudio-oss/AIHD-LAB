@@ -55,8 +55,10 @@ class SeasonalViewsSeeder extends Seeder
                     'response_timeout_s' => 120,
                     'get_interval_s' => 30,
                     'max_get_attempts' => 10,
-                    'post_url' => 'https://api.example.test/season-gen/generate',
-                    'get_url' => 'https://api.example.test/season-gen/result',
+                    // Point at the in-app dev service so the walking skeleton
+                    // runs end-to-end locally (see routes/dev.php).
+                    'post_url' => config('app.url').'/dev/services/generate',
+                    'get_url' => config('app.url').'/dev/services/result',
                     'published_at' => null,
                 ],
             );
