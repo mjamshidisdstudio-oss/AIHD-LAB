@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ServiceKind;
 use App\Enums\ServiceStatus;
 use Database\Factories\ServiceFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -25,6 +26,7 @@ class Service extends Model
         'external_url',
         'category',
         'service_secret',
+        'webhook_signing_key',
         'status',
         'consecutive_failures',
         'max_concurrent',
@@ -37,6 +39,7 @@ class Service extends Model
 
     protected $hidden = [
         'service_secret',
+        'webhook_signing_key',
     ];
 
     protected function casts(): array
@@ -45,6 +48,7 @@ class Service extends Model
             'kind' => ServiceKind::class,
             'status' => ServiceStatus::class,
             'service_secret' => 'hashed',
+            'webhook_signing_key' => 'encrypted',
             'consecutive_failures' => 'integer',
             'max_concurrent' => 'integer',
             'vote_up' => 'integer',
@@ -52,6 +56,57 @@ class Service extends Model
             'avg_latency_ms' => 'integer',
             'trending_rank' => 'integer',
         ];
+    }
+
+    /**
+     * Whether a secret has been pasted for this service. The raw value is never
+     * exposed, so this boolean is how callers learn a secret is set.
+     */
+    protected function hasSecret(): Attribute
+    {
+        return Attribute::get(
+            fn (): bool => ($this->attributes['service_secret'] ?? null) !== null,
+        );
+    }
+
+    /**
+     * A short, non-reversible fingerprint of the stored secret hash — enough to
+     * tell two secrets apart in the UI, useless as a credential. Null when no
+     * secret is set. Derived from the hash, so it never reveals the plaintext.
+     */
+    protected function secretPreview(): Attribute
+    {
+        return Attribute::get(function (): ?string {
+            $stored = $this->attributes['service_secret'] ?? null;
+
+            return $stored === null ? null : substr(hash('sha256', $stored), 0, 12);
+        });
+    }
+
+    /**
+     * Whether an encrypted webhook signing key has been pasted for this service.
+     */
+    protected function hasWebhookSigningKey(): Attribute
+    {
+        return Attribute::get(
+            fn (): bool => ($this->attributes['webhook_signing_key'] ?? null) !== null,
+        );
+    }
+
+    /**
+     * A short, non-reversible fingerprint of the signing key. Because the key is
+     * retrievable, the preview is derived from the decrypted value so it stays
+     * stable across re-encryption — still just a fingerprint, never the key.
+     */
+    protected function webhookSigningKeyPreview(): Attribute
+    {
+        return Attribute::get(function (): ?string {
+            $value = $this->webhook_signing_key;
+
+            return ($value === null || $value === '')
+                ? null
+                : substr(hash('sha256', $value), 0, 12);
+        });
     }
 
     /**

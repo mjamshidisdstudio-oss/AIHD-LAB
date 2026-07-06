@@ -6,7 +6,6 @@ use App\Enums\ServiceKind;
 use App\Enums\ServiceStatus;
 use App\Models\Service;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Create a catalog service together with its first, empty draft version (v1).
@@ -31,8 +30,12 @@ class CreateService
                 'kind' => $attributes['kind'] ?? ServiceKind::Internal,
                 'external_url' => $attributes['external_url'] ?? null,
                 'category' => $attributes['category'],
-                // Hashed by the model cast; generated when not supplied.
-                'service_secret' => $attributes['service_secret'] ?? Str::random(48),
+                // Accepted as pasted and hashed by the model cast. Never
+                // generated: a service with no pasted secret simply has none.
+                'service_secret' => $attributes['service_secret'] ?? null,
+                // The retrievable counterpart, encrypted at rest. Also pasted,
+                // also never generated.
+                'webhook_signing_key' => $attributes['webhook_signing_key'] ?? null,
                 'status' => $attributes['status'] ?? ServiceStatus::Active,
             ]);
 

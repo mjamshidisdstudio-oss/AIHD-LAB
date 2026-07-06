@@ -3,8 +3,10 @@
 namespace App\Http\Requests\Catalog;
 
 use App\Models\ServiceInput;
+use App\Support\Catalog\DependencyGraph;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class UpdateInputRequest extends FormRequest
 {
@@ -42,5 +44,26 @@ class UpdateInputRequest extends FormRequest
             'sort_order' => ['sometimes', 'integer', 'min:0'],
             'config' => ['sometimes', 'nullable', 'array'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            // Only re-check the graph when the edge itself is being changed.
+            if (! $this->has('depends_on_input_id')) {
+                return;
+            }
+
+            /** @var ServiceInput $input */
+            $input = $this->route('input');
+            $target = $this->input('depends_on_input_id');
+
+            if (DependencyGraph::inputEdgeCreatesCycle($input, $target === null ? null : (string) $target)) {
+                $validator->errors()->add(
+                    'depends_on_input_id',
+                    'This dependency would create a cycle in the input graph.',
+                );
+            }
+        });
     }
 }
