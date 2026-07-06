@@ -2,8 +2,11 @@
 
 use App\Http\Controllers\Admin\Catalog\InputController;
 use App\Http\Controllers\Admin\Catalog\OptionController;
+use App\Http\Controllers\Admin\Catalog\OptionDependencyController;
+use App\Http\Controllers\Admin\Catalog\OutputController;
 use App\Http\Controllers\Admin\Catalog\ServiceController;
 use App\Http\Controllers\Admin\Catalog\VersionController;
+use App\Http\Controllers\Admin\Catalog\WaitingTextController;
 use App\Http\Controllers\OrderController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -63,4 +66,16 @@ Route::middleware(['auth:sanctum', 'can:manage-catalog'])
         Route::post('inputs/{input}/options', [OptionController::class, 'store'])->name('inputs.options.store');
         Route::patch('options/{option}', [OptionController::class, 'update'])->name('options.update');
         Route::delete('options/{option}', [OptionController::class, 'destroy'])->name('options.destroy');
+
+        Route::post('versions/{version}/outputs', [OutputController::class, 'store'])->name('versions.outputs.store');
+        Route::patch('outputs/{output}', [OutputController::class, 'update'])->name('outputs.update');
+        Route::delete('outputs/{output}', [OutputController::class, 'destroy'])->name('outputs.destroy');
+
+        Route::post('versions/{version}/waiting-texts', [WaitingTextController::class, 'store'])->name('versions.waiting-texts.store');
+        Route::patch('waiting-texts/{waitingText}', [WaitingTextController::class, 'update'])->name('waiting-texts.update');
+        Route::delete('waiting-texts/{waitingText}', [WaitingTextController::class, 'destroy'])->name('waiting-texts.destroy');
+
+        Route::post('versions/{version}/option-dependencies', [OptionDependencyController::class, 'store'])->name('versions.option-dependencies.store');
+        Route::patch('option-dependencies/{optionDependency}', [OptionDependencyController::class, 'update'])->name('option-dependencies.update');
+        Route::delete('option-dependencies/{optionDependency}', [OptionDependencyController::class, 'destroy'])->name('option-dependencies.destroy');
     });

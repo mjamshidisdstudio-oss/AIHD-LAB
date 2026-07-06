@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ServiceKind;
 use App\Enums\ServiceStatus;
 use Database\Factories\ServiceFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -52,6 +53,31 @@ class Service extends Model
             'avg_latency_ms' => 'integer',
             'trending_rank' => 'integer',
         ];
+    }
+
+    /**
+     * Whether a secret has been pasted for this service. The raw value is never
+     * exposed, so this boolean is how callers learn a secret is set.
+     */
+    protected function hasSecret(): Attribute
+    {
+        return Attribute::get(
+            fn (): bool => ($this->attributes['service_secret'] ?? null) !== null,
+        );
+    }
+
+    /**
+     * A short, non-reversible fingerprint of the stored secret hash — enough to
+     * tell two secrets apart in the UI, useless as a credential. Null when no
+     * secret is set. Derived from the hash, so it never reveals the plaintext.
+     */
+    protected function secretPreview(): Attribute
+    {
+        return Attribute::get(function (): ?string {
+            $stored = $this->attributes['service_secret'] ?? null;
+
+            return $stored === null ? null : substr(hash('sha256', $stored), 0, 12);
+        });
     }
 
     /**

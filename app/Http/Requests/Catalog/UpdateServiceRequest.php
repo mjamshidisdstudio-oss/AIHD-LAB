@@ -24,6 +24,9 @@ class UpdateServiceRequest extends FormRequest
             'image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'category' => ['sometimes', 'string', 'max:255'],
             'external_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            // Accepted as pasted and re-hashed by the model cast on save. Never
+            // generated; omit the field to leave the existing secret untouched.
+            'service_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', Rule::enum(ServiceStatus::class)],
         ];
     }
