@@ -28,6 +28,7 @@ class ServiceFactory extends Factory
             'external_url' => null,
             'category' => $this->faker->randomElement(['interior', 'portrait', 'restyle', 'upscale']),
             'service_secret' => Str::random(40),
+            'webhook_signing_key' => Str::random(48),
             'status' => ServiceStatus::Active,
             'consecutive_failures' => 0,
             'current_version_id' => null,

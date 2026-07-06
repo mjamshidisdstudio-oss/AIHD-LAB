@@ -27,6 +27,8 @@ class UpdateServiceRequest extends FormRequest
             // Accepted as pasted and re-hashed by the model cast on save. Never
             // generated; omit the field to leave the existing secret untouched.
             'service_secret' => ['sometimes', 'nullable', 'string', 'max:255'],
+            // Re-encrypted on save; omit to leave the existing key untouched.
+            'webhook_signing_key' => ['sometimes', 'nullable', 'string', 'max:255'],
             'status' => ['sometimes', Rule::enum(ServiceStatus::class)],
         ];
     }
