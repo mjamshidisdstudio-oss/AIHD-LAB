@@ -45,7 +45,7 @@ class SubmitOrder
     /**
      * @param  array<string, mixed>  $answers  input slug => scalar value or option slug(s)
      * @param  array<string, UploadedFile>  $files  input slug => uploaded file
-     * @param  array<string, mixed>  $context  source / entry_mode
+     * @param  array<string, mixed>  $context  source / entry_mode / regenerated_from_order_id / root_order_id
      */
     public function handle(Service $service, string $userRef, array $answers = [], array $files = [], array $context = []): Order
     {
@@ -78,6 +78,8 @@ class SubmitOrder
                     'entry_mode' => $context['entry_mode'] ?? EntryMode::Wizard,
                     'coins_charged' => $coinCost,
                     'coin_txn_ref' => $txnRef,
+                    'regenerated_from_order_id' => $context['regenerated_from_order_id'] ?? null,
+                    'root_order_id' => $context['root_order_id'] ?? null,
                 ]);
 
                 foreach ($version->inputs as $input) {

@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\ServiceKind;
 use App\Enums\ServiceStatus;
 use Database\Factories\ServiceFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -145,6 +146,25 @@ class Service extends Model
     public function currentVersion(): BelongsTo
     {
         return $this->belongsTo(ServiceVersion::class, 'current_version_id');
+    }
+
+    /**
+     * Annotates each row with is_bookmarked/my_vote for one user, via a
+     * correlated EXISTS and a scalar subquery — no N+1 across the list.
+     *
+     * @param  Builder<Service>  $query
+     * @return Builder<Service>
+     */
+    public function scopeWithMarketplaceContext(Builder $query, string $userRef): Builder
+    {
+        return $query
+            ->withExists(['bookmarks as is_bookmarked' => fn ($q) => $q->where('user_ref', $userRef)])
+            ->addSelect(['my_vote' => ServiceVote::query()
+                ->select('value')
+                ->whereColumn('service_id', 'services.id')
+                ->where('user_ref', $userRef)
+                ->limit(1),
+            ]);
     }
 
     /**
