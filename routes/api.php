@@ -7,6 +7,13 @@ use App\Http\Controllers\Admin\Catalog\OutputController;
 use App\Http\Controllers\Admin\Catalog\ServiceController;
 use App\Http\Controllers\Admin\Catalog\VersionController;
 use App\Http\Controllers\Admin\Catalog\WaitingTextController;
+use App\Http\Controllers\Marketplace\BookmarkController;
+use App\Http\Controllers\Marketplace\BroadcastAuthController;
+use App\Http\Controllers\Marketplace\CatalogController;
+use App\Http\Controllers\Marketplace\CommentController;
+use App\Http\Controllers\Marketplace\DownloadController;
+use App\Http\Controllers\Marketplace\InteractionController;
+use App\Http\Controllers\Marketplace\VoteController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\StorageController;
 use App\Http\Controllers\WebhookController;
@@ -47,6 +54,37 @@ Route::post('storage', [StorageController::class, 'store'])->name('storage.store
 Route::middleware('auth.core')->group(function () {
     Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
     Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Marketplace (site consumer catalog + community)
+|--------------------------------------------------------------------------
+|
+| The Nuxt marketplace client's read/community surface: browsing the catalog,
+| voting, commenting, bookmarking, and result downloads. Authenticated the
+| same way as orders — via the core identity token, never Sanctum — since
+| votes/bookmarks/comments all need a real user_ref to key on.
+|
+*/
+Route::middleware('auth.core')->prefix('marketplace')->name('marketplace.')->group(function () {
+    Route::get('services', [CatalogController::class, 'index'])->name('services.index');
+    Route::get('services/{service:slug}', [CatalogController::class, 'show'])->name('services.show');
+
+    Route::post('services/{service}/vote', [VoteController::class, 'store'])->name('services.vote');
+    Route::post('services/{service}/bookmark', [BookmarkController::class, 'store'])->name('services.bookmark');
+    Route::post('services/{service}/external-click', [InteractionController::class, 'externalClick'])->name('services.external-click');
+
+    Route::get('services/{service}/comments', [CommentController::class, 'index'])->name('services.comments.index');
+    Route::post('services/{service}/comments', [CommentController::class, 'store'])->name('services.comments.store');
+
+    Route::get('results/{result}/download', [DownloadController::class, 'show'])->name('results.download');
+
+    // Bridges core-token identity into Laravel's broadcasting auth flow so
+    // Echo can subscribe to a private orders.{userRef} channel — see
+    // BroadcastAuthController for why this can't just be the framework's
+    // auto-registered POST /broadcasting/auth route.
+    Route::post('broadcasting/auth', [BroadcastAuthController::class, 'authenticate'])->name('broadcasting.auth');
 });
 
 /*
