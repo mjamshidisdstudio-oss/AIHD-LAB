@@ -18,12 +18,19 @@ class OrderResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            // The owning user's opaque core identity — the marketplace client
+            // needs this to subscribe to its own `orders.{user_ref}` Echo
+            // channel (see routes/channels.php); it is never anyone else's,
+            // since this endpoint already 403s a mismatched requester.
+            'user_ref' => $this->user_ref,
             'service_id' => $this->service_id,
             'service_version_id' => $this->service_version_id,
             'status' => $this->status,
             'source' => $this->source,
             'entry_mode' => $this->entry_mode,
             'coins_charged' => $this->coins_charged,
+            'regenerated_from_order_id' => $this->regenerated_from_order_id,
+            'root_order_id' => $this->root_order_id,
             'completed_at' => $this->completed_at,
             'created_at' => $this->created_at,
             'requests' => RequestResource::collection($this->whenLoaded('requests')),

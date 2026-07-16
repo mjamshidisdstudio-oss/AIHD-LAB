@@ -28,6 +28,7 @@ class StoreServiceRequest extends FormRequest
             'external_url' => ['nullable', 'url', 'max:2048', 'required_if:kind,external'],
             'category' => ['required', 'string', 'max:255'],
             'service_secret' => ['nullable', 'string', 'max:255'],
+            'webhook_signing_key' => ['nullable', 'string', 'max:255'],
             'status' => ['sometimes', Rule::enum(ServiceStatus::class)],
         ];
     }

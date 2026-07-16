@@ -21,6 +21,9 @@ class SubmitOrderRequest extends FormRequest
         return [
             'service_id' => ['required', 'uuid', 'exists:services,id'],
             'entry_mode' => ['sometimes', Rule::enum(EntryMode::class)],
+            // "Run again" from a completed order's results: chains the new
+            // order into that order's regeneration lineage (see OrderController).
+            'regenerated_from_order_id' => ['sometimes', 'uuid', 'exists:orders,id'],
             // Scalar / select answers keyed by input slug. Per-input requirements
             // (which inputs are mandatory) are enforced by SubmitOrder against the
             // published version.

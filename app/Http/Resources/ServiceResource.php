@@ -26,6 +26,12 @@ class ServiceResource extends JsonResource
             'external_url' => $this->external_url,
             'category' => $this->category,
             'status' => $this->status,
+            // Neither secret is ever serialised — only whether each is set and a
+            // short non-reversible fingerprint of it.
+            'has_secret' => $this->has_secret,
+            'secret_preview' => $this->secret_preview,
+            'has_webhook_signing_key' => $this->has_webhook_signing_key,
+            'webhook_signing_key_preview' => $this->webhook_signing_key_preview,
             'consecutive_failures' => $this->consecutive_failures,
             'current_version_id' => $this->current_version_id,
             'vote_up' => $this->vote_up,

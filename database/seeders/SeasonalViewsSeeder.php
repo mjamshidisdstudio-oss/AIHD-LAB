@@ -40,6 +40,9 @@ class SeasonalViewsSeeder extends Seeder
                     'external_url' => null,
                     'category' => 'interior',
                     'service_secret' => Str::random(48),
+                    // Stable dev signing key so the local webhook/storage flow
+                    // (Phase 4/5) can recompute HMACs against a known value.
+                    'webhook_signing_key' => 'dev-season-gen-signing-key',
                     'status' => ServiceStatus::Active,
                 ],
             );
