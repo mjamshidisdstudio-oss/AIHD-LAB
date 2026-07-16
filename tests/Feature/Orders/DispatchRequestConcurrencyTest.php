@@ -36,12 +36,13 @@ class DispatchRequestConcurrencyTest extends TestCase
         return $service->refresh();
     }
 
-    private function requestFor(Service $service, RequestStatus $status): Request
+    private function requestFor(Service $service, RequestStatus $status, bool $adminPreview = false): Request
     {
-        $order = Order::factory()->create([
+        $orderFactory = Order::factory()->state([
             'service_id' => $service->id,
             'service_version_id' => $service->current_version_id,
         ]);
+        $order = $adminPreview ? $orderFactory->adminPreview()->create() : $orderFactory->create();
 
         return Request::factory()->create([
             'order_id' => $order->id,
@@ -83,5 +84,37 @@ class DispatchRequestConcurrencyTest extends TestCase
         Http::assertSentCount(1);
         $this->assertSame(RequestStatus::Awaiting, $queued->refresh()->status);
         $this->assertSame('ext-9', $queued->refresh()->external_order_id);
+    }
+
+    public function test_admin_preview_request_is_admitted_even_at_capacity(): void
+    {
+        Queue::fake([PollRequestResult::class]);
+        Http::fake(['*' => Http::response(['external_order_id' => 'x', 'status' => 'accepted'])]);
+
+        $service = $this->publishedService(maxConcurrent: 1);
+        // One site request already fills the single slot.
+        $this->requestFor($service, RequestStatus::Awaiting);
+        $preview = $this->requestFor($service, RequestStatus::Queued, adminPreview: true);
+
+        (new DispatchRequest($preview))->handle(app(ExternalServiceClient::class));
+
+        Http::assertSentCount(1);
+        $this->assertSame(RequestStatus::Awaiting, $preview->refresh()->status);
+    }
+
+    public function test_admin_preview_request_does_not_count_toward_capacity_for_others(): void
+    {
+        Queue::fake([PollRequestResult::class]);
+        Http::fake(['*' => Http::response(['external_order_id' => 'x', 'status' => 'accepted'])]);
+
+        $service = $this->publishedService(maxConcurrent: 1);
+        // The single slot is "occupied" only by an admin-preview run.
+        $this->requestFor($service, RequestStatus::Awaiting, adminPreview: true);
+        $queued = $this->requestFor($service, RequestStatus::Queued);
+
+        (new DispatchRequest($queued))->handle(app(ExternalServiceClient::class));
+
+        Http::assertSentCount(1);
+        $this->assertSame(RequestStatus::Awaiting, $queued->refresh()->status);
     }
 }

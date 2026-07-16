@@ -15,6 +15,7 @@ use App\Models\File;
 use App\Models\Order;
 use App\Models\Service;
 use App\Models\ServiceInput;
+use App\Models\ServiceVersion;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -46,12 +47,25 @@ class SubmitOrder
      * @param  array<string, mixed>  $answers  input slug => scalar value or option slug(s)
      * @param  array<string, UploadedFile>  $files  input slug => uploaded file
      * @param  array<string, mixed>  $context  source / entry_mode / regenerated_from_order_id / root_order_id
+     * @param  ?ServiceVersion  $version  explicit version to run (admin preview only); defaults to
+     *                                    the service's currentVersion for real customer orders
      */
-    public function handle(Service $service, string $userRef, array $answers = [], array $files = [], array $context = []): Order
-    {
-        $version = $service->currentVersion;
+    public function handle(
+        Service $service,
+        string $userRef,
+        array $answers = [],
+        array $files = [],
+        array $context = [],
+        ?ServiceVersion $version = null,
+    ): Order {
+        $version ??= $service->currentVersion;
+        $source = $context['source'] ?? OrderSource::Site;
+        $isAdminPreview = $source === OrderSource::AdminPreview;
 
-        if ($version === null || ! $version->isPublished()) {
+        // Real customer orders must target a published version. Admin preview
+        // is the one exception — it exists specifically to exercise a draft
+        // before it is ever published.
+        if ($version === null || (! $isAdminPreview && ! $version->isPublished())) {
             throw ServiceUnavailableForOrdersException::for($service);
         }
 
@@ -59,8 +73,6 @@ class SubmitOrder
 
         // Pre-generate the order id so it is the idempotency key for the deduct.
         $orderId = (string) Str::orderedUuid();
-        $source = $context['source'] ?? OrderSource::Site;
-        $isAdminPreview = $source === OrderSource::AdminPreview;
         $coinCost = $isAdminPreview ? 0 : $version->coin_cost;
 
         // (1) Deduct OUTSIDE the transaction. Admin previews never charge.

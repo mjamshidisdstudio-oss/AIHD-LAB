@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AuthController as AdminAuthController;
 use App\Http\Controllers\Admin\Catalog\InputController;
 use App\Http\Controllers\Admin\Catalog\OptionController;
 use App\Http\Controllers\Admin\Catalog\OptionDependencyController;
@@ -7,6 +8,11 @@ use App\Http\Controllers\Admin\Catalog\OutputController;
 use App\Http\Controllers\Admin\Catalog\ServiceController;
 use App\Http\Controllers\Admin\Catalog\VersionController;
 use App\Http\Controllers\Admin\Catalog\WaitingTextController;
+use App\Http\Controllers\Admin\CommentController as AdminCommentController;
+use App\Http\Controllers\Admin\OrderController as AdminOrderController;
+use App\Http\Controllers\Admin\PreviewOrderController as AdminPreviewOrderController;
+use App\Http\Controllers\Admin\ResultDownloadController as AdminResultDownloadController;
+use App\Http\Controllers\Admin\WebhookDeliveryController as AdminWebhookDeliveryController;
 use App\Http\Controllers\Marketplace\BookmarkController;
 use App\Http\Controllers\Marketplace\BroadcastAuthController;
 use App\Http\Controllers\Marketplace\CatalogController;
@@ -98,10 +104,14 @@ Route::middleware('auth.core')->prefix('marketplace')->name('marketplace.')->gro
 | are dedicated actions.
 |
 */
+Route::post('admin/login', [AdminAuthController::class, 'login'])->name('admin.login');
+
 Route::middleware(['auth:sanctum', 'can:manage-catalog'])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
+        Route::post('logout', [AdminAuthController::class, 'logout'])->name('logout');
+
         Route::apiResource('services', ServiceController::class)
             ->only(['index', 'store', 'show', 'update']);
 
@@ -136,4 +146,17 @@ Route::middleware(['auth:sanctum', 'can:manage-catalog'])
         Route::post('versions/{version}/option-dependencies', [OptionDependencyController::class, 'store'])->name('versions.option-dependencies.store');
         Route::patch('option-dependencies/{optionDependency}', [OptionDependencyController::class, 'update'])->name('option-dependencies.update');
         Route::delete('option-dependencies/{optionDependency}', [OptionDependencyController::class, 'destroy'])->name('option-dependencies.destroy');
+
+        Route::post('versions/{version}/preview-orders', [AdminPreviewOrderController::class, 'store'])->name('versions.preview-orders.store');
+
+        Route::get('services/{service}/orders', [AdminOrderController::class, 'index'])->name('services.orders.index');
+        Route::get('orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
+        Route::get('results/{result}/download', [AdminResultDownloadController::class, 'show'])->name('results.download');
+
+        Route::get('services/{service}/webhook-deliveries', [AdminWebhookDeliveryController::class, 'index'])->name('services.webhook-deliveries.index');
+        Route::get('webhook-deliveries/{webhookDelivery}', [AdminWebhookDeliveryController::class, 'show'])->name('webhook-deliveries.show');
+
+        Route::get('services/{service}/comments', [AdminCommentController::class, 'index'])->name('services.comments.index');
+        Route::patch('comments/{comment}', [AdminCommentController::class, 'update'])->name('comments.update');
+        Route::post('comments/{comment}/reply', [AdminCommentController::class, 'reply'])->name('comments.reply');
     });

@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Contracts\ExternalServiceClient;
+use App\Enums\OrderSource;
 use App\Enums\RequestStatus;
 use App\Models\Order;
 use App\Models\Request;
@@ -44,8 +45,9 @@ class DispatchRequest implements ShouldQueue
         $service = $order->service;
         $version = $order->version;
 
+        $isAdminPreview = $order->source === OrderSource::AdminPreview;
         $decision = Cache::lock("dispatch:service:{$service->id}", 15)->get(
-            fn () => $this->admit($request, $service)
+            fn () => $this->admit($request, $service, $isAdminPreview)
         );
 
         if ($decision === false) {
@@ -81,7 +83,7 @@ class DispatchRequest implements ShouldQueue
      * Decide (under the per-service lock) what to do with the request:
      * 'skip' (already dispatched), 'release' (at cap), or 'admitted' (marked sent).
      */
-    private function admit(Request $request, Service $service): string
+    private function admit(Request $request, Service $service, bool $isAdminPreview): string
     {
         $fresh = $request->fresh();
 
@@ -89,7 +91,9 @@ class DispatchRequest implements ShouldQueue
             return 'skip';
         }
 
-        if ($this->inFlightCount($service) >= $service->max_concurrent) {
+        // Admin-preview runs are cap-free in both directions: excluded from
+        // the in-flight count (above) and never gated by it themselves.
+        if (! $isAdminPreview && $this->inFlightCount($service) >= $service->max_concurrent) {
             return 'release';
         }
 
@@ -105,6 +109,10 @@ class DispatchRequest implements ShouldQueue
     {
         return Request::query()
             ->whereRelation('order', 'service_id', $service->id)
+            // Admin-preview runs never contend for the concurrency cap — an
+            // operator exercising a draft's live preview shouldn't be able to
+            // starve real customer traffic, nor be starved by it.
+            ->whereRelation('order', 'source', '!=', OrderSource::AdminPreview->value)
             ->whereIn('status', [
                 RequestStatus::Sent->value,
                 RequestStatus::Awaiting->value,
