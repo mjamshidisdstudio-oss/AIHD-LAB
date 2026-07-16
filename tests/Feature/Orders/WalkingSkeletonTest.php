@@ -17,12 +17,12 @@ use App\Models\Service;
 use App\Models\ServiceInput;
 use App\Models\ServiceOutput;
 use App\Models\ServiceVersion;
-use App\Models\User;
+use App\Services\Coins\MockCoinService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
-use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\ActsAsCoreUser;
 use Tests\TestCase;
 
 /**
@@ -32,7 +32,7 @@ use Tests\TestCase;
  */
 class WalkingSkeletonTest extends TestCase
 {
-    use RefreshDatabase;
+    use ActsAsCoreUser, RefreshDatabase;
 
     private function publishedService(): Service
     {
@@ -73,12 +73,14 @@ class WalkingSkeletonTest extends TestCase
             ]),
         ]);
 
+        // Coins are exercised in isolation by SubmitOrderTest/CoinLifecycleTest;
+        // here we only care about counting calls to the external service.
+        $this->app->instance(CoinService::class, new MockCoinService);
         $service = $this->publishedService();
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
+        $headers = $this->coreUserHeaders('user-1');
 
         // 1. Submit -> order processing, request queued, dispatch enqueued.
-        $orderId = $this->postJson('/api/orders', [
+        $orderId = $this->withHeaders($headers)->postJson('/api/orders', [
             'service_id' => $service->id,
             'answers' => ['prompt' => 'a cosy cabin'],
         ])->assertStatus(202)->json('data.id');
@@ -110,7 +112,7 @@ class WalkingSkeletonTest extends TestCase
         Storage::disk('media')->assertExists($imageResult->file->path);
 
         // 4. Read back from our DB only.
-        $this->getJson("/api/orders/{$orderId}")
+        $this->withHeaders($headers)->getJson("/api/orders/{$orderId}")
             ->assertOk()
             ->assertJsonPath('data.status', 'completed')
             ->assertJsonPath('data.requests.0.status', 'completed')

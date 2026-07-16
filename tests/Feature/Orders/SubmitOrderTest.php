@@ -5,6 +5,7 @@ namespace Tests\Feature\Orders;
 use App\Actions\Catalog\PublishVersion;
 use App\Actions\Orders\SubmitOrder;
 use App\Contracts\CoinService;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
 use App\Enums\ServiceInputType;
@@ -17,6 +18,7 @@ use App\Models\Service;
 use App\Models\ServiceInput;
 use App\Models\ServiceOutput;
 use App\Models\ServiceVersion;
+use App\Services\Coins\MockCoinService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Validation\ValidationException;
@@ -52,6 +54,7 @@ class SubmitOrderTest extends TestCase
     public function test_submit_writes_order_inputs_and_a_queued_request_then_dispatches_after_commit(): void
     {
         Queue::fake();
+        $this->app->instance(CoinService::class, new MockCoinService);
         $service = $this->publishedService();
 
         $order = app(SubmitOrder::class)->handle($service, 'user-1', ['prompt' => 'a cosy cabin']);
@@ -68,17 +71,38 @@ class SubmitOrderTest extends TestCase
     }
 
     /**
-     * Never Again: coins are charged BEFORE the transaction, so a rollback must
-     * refund them, leave no order / input / request behind, and enqueue no ghost
-     * dispatch job.
+     * Never Again: exactly one deduct per submit, and the resulting txn_ref is
+     * persisted on the order (needed later to settle/refund).
      */
-    public function test_a_rolled_back_submit_refunds_coins_and_leaves_no_order_or_ghost_job(): void
+    public function test_submit_deducts_once_and_stores_txn_ref(): void
     {
         Queue::fake();
 
-        // Spy the wallet: exactly one charge, then exactly one compensating refund.
         $coins = Mockery::mock(CoinService::class);
-        $coins->shouldReceive('charge')->once()->andReturn('txn-abc');
+        $coins->shouldReceive('deduct')->once()->with('user-1', 2, Mockery::type('string'))->andReturn('txn-xyz');
+        $this->app->instance(CoinService::class, $coins);
+
+        $service = $this->publishedService();
+
+        $order = app(SubmitOrder::class)->handle($service, 'user-1', ['prompt' => 'a cosy cabin']);
+
+        $this->assertSame('txn-xyz', $order->refresh()->coin_txn_ref);
+        $this->assertSame(2, $order->coins_charged);
+        // Mockery verifies deduct(1) on tearDown.
+    }
+
+    /**
+     * Never Again: coins are deducted BEFORE the transaction, so a rollback must
+     * trigger a compensating refund and leave no order / input / request behind,
+     * with no ghost dispatch job.
+     */
+    public function test_rolled_back_transaction_after_deduct_triggers_compensating_refund(): void
+    {
+        Queue::fake();
+
+        // Spy the wallet: exactly one deduct, then exactly one compensating refund.
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldReceive('deduct')->once()->andReturn('txn-abc');
         $coins->shouldReceive('refund')->once()->with('txn-abc');
         $this->app->instance(CoinService::class, $coins);
 
@@ -96,11 +120,41 @@ class SubmitOrderTest extends TestCase
         $this->assertSame(0, Request::count());
         $this->assertDatabaseCount('order_inputs', 0);
         Queue::assertNotPushed(DispatchRequest::class);
-        // Mockery verifies charge(1) + refund(1) on tearDown.
+        // Mockery verifies deduct(1) + refund(1) on tearDown.
+    }
+
+    /**
+     * Never Again: admin-preview orders exercise a version without charging a
+     * real customer — no deduct call is ever made, and nothing is stored to
+     * later settle/refund.
+     */
+    public function test_admin_preview_orders_are_coin_free(): void
+    {
+        Queue::fake();
+
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldNotReceive('deduct');
+        $coins->shouldNotReceive('refund');
+        $this->app->instance(CoinService::class, $coins);
+
+        $service = $this->publishedService();
+
+        $order = app(SubmitOrder::class)->handle(
+            $service,
+            'user-1',
+            ['prompt' => 'a cosy cabin'],
+            [],
+            ['source' => OrderSource::AdminPreview],
+        );
+
+        $this->assertSame(OrderSource::AdminPreview, $order->source);
+        $this->assertSame(0, $order->coins_charged);
+        $this->assertNull($order->coin_txn_ref);
     }
 
     public function test_submitting_a_service_with_no_published_version_is_rejected(): void
     {
+        $this->app->instance(CoinService::class, new MockCoinService);
         $service = Service::factory()->create(['current_version_id' => null]);
 
         $this->expectException(ServiceUnavailableForOrdersException::class);

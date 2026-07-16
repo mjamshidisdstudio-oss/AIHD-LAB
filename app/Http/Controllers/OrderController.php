@@ -24,7 +24,7 @@ class OrderController extends Controller
 
         $order = $submit->handle(
             $service,
-            (string) $request->user()->id,
+            (string) $request->userRef(),
             $request->input('answers', []),
             $request->file('files', []),
             $context,
@@ -41,7 +41,7 @@ class OrderController extends Controller
      */
     public function show(Request $request, Order $order): OrderResource
     {
-        abort_unless((string) $order->user_ref === (string) $request->user()->id, 403);
+        abort_unless((string) $order->user_ref === (string) $request->userRef(), 403);
 
         return OrderResource::make(
             $order->load(['requests.results.file'])
