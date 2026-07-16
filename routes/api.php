@@ -8,12 +8,30 @@ use App\Http\Controllers\Admin\Catalog\ServiceController;
 use App\Http\Controllers\Admin\Catalog\VersionController;
 use App\Http\Controllers\Admin\Catalog\WaitingTextController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\StorageController;
+use App\Http\Controllers\WebhookController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });
+
+/*
+|--------------------------------------------------------------------------
+| Ingest gateway (external services)
+|--------------------------------------------------------------------------
+|
+| Result webhooks and the opaque media storage API. These are called by the
+| external/dev service, NOT by a logged-in user — auth is per-service (HMAC
+| signature for webhooks, service_key Bearer for storage), never Sanctum.
+|
+*/
+Route::post('webhooks/{service}/results', [WebhookController::class, 'results'])
+    ->name('webhooks.results');
+
+Route::get('storage/{mediaId}', [StorageController::class, 'show'])->name('storage.show');
+Route::post('storage', [StorageController::class, 'store'])->name('storage.store');
 
 /*
 |--------------------------------------------------------------------------
