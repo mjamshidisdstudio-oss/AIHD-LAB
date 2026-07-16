@@ -6,15 +6,14 @@ use App\Enums\RequestStatus;
 use App\Models\Order;
 use App\Models\Request;
 use App\Models\Result;
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Laravel\Sanctum\Sanctum;
+use Tests\Concerns\ActsAsCoreUser;
 use Tests\TestCase;
 
 class OrderApiTest extends TestCase
 {
-    use RefreshDatabase;
+    use ActsAsCoreUser, RefreshDatabase;
 
     public function test_guest_cannot_submit_or_read_orders(): void
     {
@@ -24,10 +23,12 @@ class OrderApiTest extends TestCase
 
     public function test_a_user_cannot_read_another_users_order(): void
     {
-        Sanctum::actingAs(User::factory()->create());
+        $headers = $this->coreUserHeaders('user-1');
         $othersOrder = Order::factory()->create(); // random user_ref
 
-        $this->getJson("/api/orders/{$othersOrder->id}")->assertForbidden();
+        $this->withHeaders($headers)
+            ->getJson("/api/orders/{$othersOrder->id}")
+            ->assertForbidden();
     }
 
     /**
@@ -38,17 +39,16 @@ class OrderApiTest extends TestCase
     {
         Http::fake(); // any outbound call would be recorded and fail the assertion
 
-        $user = User::factory()->create();
-        Sanctum::actingAs($user);
-
-        $order = Order::factory()->create(['user_ref' => $user->id]);
+        $headers = $this->coreUserHeaders('user-1');
+        $order = Order::factory()->create(['user_ref' => 'user-1']);
         $request = Request::factory()->create([
             'order_id' => $order->id,
             'status' => RequestStatus::Completed,
         ]);
         Result::factory()->create(['request_id' => $request->id, 'result_number' => 1]);
 
-        $this->getJson("/api/orders/{$order->id}")
+        $this->withHeaders($headers)
+            ->getJson("/api/orders/{$order->id}")
             ->assertOk()
             ->assertJsonPath('data.id', $order->id)
             ->assertJsonCount(1, 'data.requests');

@@ -21,10 +21,12 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 |--------------------------------------------------------------------------
 |
 | Submit an order and read its status/results. Reads are answered entirely
-| from our database — never from the external service.
+| from our database — never from the external service. Authenticated via the
+| core identity service (auth.core), NOT Sanctum: end-customer identity is
+| owned by the core team, not our own `users` table (admin accounts only).
 |
 */
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth.core')->group(function () {
     Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
     Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
 });

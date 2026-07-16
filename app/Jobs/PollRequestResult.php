@@ -56,7 +56,7 @@ class PollRequestResult implements ShouldQueue
             return;
         }
 
-        $this->complete($request, $order, $result);
+        $this->complete($request, $order, $result, $coins);
     }
 
     private function handlePending(Request $request, Order $order, CoinService $coins): void
@@ -78,7 +78,7 @@ class PollRequestResult implements ShouldQueue
         self::dispatch($request)->delay(now()->addSeconds($order->version->get_interval_s));
     }
 
-    private function complete(Request $request, Order $order, ExternalResult $result): void
+    private function complete(Request $request, Order $order, ExternalResult $result, CoinService $coins): void
     {
         DB::transaction(function () use ($request, $order, $result) {
             foreach ($result->items as $item) {
@@ -101,6 +101,12 @@ class PollRequestResult implements ShouldQueue
             'avg_latency_ms' => $result->latencyMs,
             'consecutive_failures' => 0,
         ]);
+
+        // Finalize the coin deduct now the order has actually completed.
+        // Admin-preview orders never deducted, so there is nothing to settle.
+        if ($order->coin_txn_ref !== null) {
+            $coins->settle($order->coin_txn_ref);
+        }
     }
 
     private function persistResult(Request $request, Order $order, ExternalResultItem $item, int $latencyMs): void

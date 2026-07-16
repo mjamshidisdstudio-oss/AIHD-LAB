@@ -25,14 +25,18 @@ use Illuminate\Validation\ValidationException;
  * Submit an order against a service's currently published version.
  *
  * Ordering is deliberate and load-bearing:
- *   1. coins are charged BEFORE the DB transaction (the coin service is a
+ *   1. coins are deducted BEFORE the DB transaction (the coin service is a
  *      separate system that cannot enlist in our transaction);
  *   2. the order, its inputs, and a queued request are written in ONE
  *      transaction;
  *   3. the dispatch job is enqueued AFTER the transaction commits — never
  *      inside it, or a rollback would leave a ghost job pointing at a row that
  *      does not exist;
- *   4. if the transaction fails, the charge is refunded (compensating action).
+ *   4. if the transaction fails, the deduct is refunded (compensating action);
+ *      settle() happens later, once the order actually completes.
+ *
+ * Admin-preview orders (source=admin_preview) are coin-free: no deduct is
+ * ever made, so there is nothing to settle or refund for them either.
  */
 class SubmitOrder
 {
@@ -53,22 +57,24 @@ class SubmitOrder
 
         $version->loadMissing('inputs.options');
 
-        // Pre-generate the order id so it is the idempotency key for the charge.
+        // Pre-generate the order id so it is the idempotency key for the deduct.
         $orderId = (string) Str::orderedUuid();
-        $coinCost = $version->coin_cost;
+        $source = $context['source'] ?? OrderSource::Site;
+        $isAdminPreview = $source === OrderSource::AdminPreview;
+        $coinCost = $isAdminPreview ? 0 : $version->coin_cost;
 
-        // (1) Charge OUTSIDE the transaction.
-        $txnRef = $this->coins->charge($userRef, $coinCost, $orderId);
+        // (1) Deduct OUTSIDE the transaction. Admin previews never charge.
+        $txnRef = $isAdminPreview ? null : $this->coins->deduct($userRef, $coinCost, $orderId);
 
         try {
-            $order = DB::transaction(function () use ($orderId, $service, $version, $userRef, $coinCost, $txnRef, $answers, $files, $context) {
+            $order = DB::transaction(function () use ($orderId, $service, $version, $userRef, $coinCost, $txnRef, $source, $answers, $files, $context) {
                 $order = Order::create([
                     'id' => $orderId,
                     'user_ref' => $userRef,
                     'service_id' => $service->id,
                     'service_version_id' => $version->id,
                     'status' => OrderStatus::Processing,
-                    'source' => $context['source'] ?? OrderSource::Site,
+                    'source' => $source,
                     'entry_mode' => $context['entry_mode'] ?? EntryMode::Wizard,
                     'coins_charged' => $coinCost,
                     'coin_txn_ref' => $txnRef,
@@ -86,8 +92,10 @@ class SubmitOrder
                 return $order;
             });
         } catch (\Throwable $e) {
-            // (4) Compensate the out-of-transaction charge.
-            $this->coins->refund($txnRef);
+            // (4) Compensate the out-of-transaction deduct, if one was made.
+            if ($txnRef !== null) {
+                $this->coins->refund($txnRef);
+            }
 
             throw $e;
         }
