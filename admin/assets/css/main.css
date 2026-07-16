@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design-file animations (service-admin.dc.html) — referenced verbatim by
+   inline style="animation:..." across the Editor/Builder screens. */
+@keyframes aihdIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px) translateX(-50%); } to { opacity: 1; transform: translateY(0) translateX(-50%); } }
+@keyframes aihdSpin { to { transform: rotate(360deg); } }
+@keyframes aihdPop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+
+html, body, #__nuxt {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter Display', 'Inter', system-ui, sans-serif;
+  color: #19191A;
+  background: #F6F7F9;
+  letter-spacing: -0.006em;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #D8DCE3; border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #C2C8D2; }

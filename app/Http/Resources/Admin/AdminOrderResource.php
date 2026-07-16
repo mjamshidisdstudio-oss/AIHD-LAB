@@ -62,6 +62,7 @@ class AdminOrderResource extends JsonResource
             $result = $latestWithResults?->results->firstWhere('result_number', $output->result_number);
 
             return [
+                'result_id' => $result?->id,
                 'result_number' => $output->result_number,
                 'type' => $output->type,
                 'has_result' => $result !== null,

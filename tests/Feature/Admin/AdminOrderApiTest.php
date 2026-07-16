@@ -143,6 +143,7 @@ class AdminOrderApiTest extends TestCase
         $outputs = $response->json('data.outputs');
         $this->assertCount(1, $outputs);
         $this->assertTrue($outputs[0]['has_result']);
+        $this->assertSame($result->id, $outputs[0]['result_id']);
         $this->assertSame(1, $outputs[0]['download_count']);
     }
 
