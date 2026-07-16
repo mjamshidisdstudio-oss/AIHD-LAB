@@ -6,11 +6,13 @@ use App\Contracts\CoinService;
 use App\Contracts\ExternalServiceClient;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
-use App\Jobs\PollRequestResult;
+use App\Enums\ServiceOutputType;
 use App\Models\Order;
 use App\Models\Request;
 use App\Models\Service;
+use App\Models\ServiceOutput;
 use App\Models\ServiceVersion;
+use App\Services\Ingest\PollRequest;
 use App\Support\External\ExternalResult;
 use App\Support\External\ExternalResultItem;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,14 +29,25 @@ class CoinLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function requestAwaiting(array $orderOverrides = [], array $versionOverrides = []): Request
-    {
+    private function requestAwaiting(
+        array $orderOverrides = [],
+        array $versionOverrides = [],
+        int $declaredOutputs = 1,
+    ): Request {
         $service = Service::factory()->create();
         $version = ServiceVersion::factory()->create(array_merge([
             'service_id' => $service->id,
             'max_get_attempts' => 5,
             'get_interval_s' => 1,
         ], $versionOverrides));
+
+        for ($n = 1; $n <= $declaredOutputs; $n++) {
+            ServiceOutput::factory()->create([
+                'service_version_id' => $version->id,
+                'result_number' => $n,
+                'type' => ServiceOutputType::Text,
+            ]);
+        }
 
         $order = Order::factory()->create(array_merge([
             'service_id' => $service->id,
@@ -63,12 +76,14 @@ class CoinLifecycleTest extends TestCase
             [new ExternalResultItem(resultNumber: 1, type: 'text', text: 'done')],
             latencyMs: 500,
         ));
+        $this->app->instance(ExternalServiceClient::class, $client);
 
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldReceive('settle')->once()->with('txn-123');
         $coins->shouldNotReceive('refund');
+        $this->app->instance(CoinService::class, $coins);
 
-        (new PollRequestResult($request))->handle($client, $coins);
+        app(PollRequest::class)->handle($request);
 
         $this->assertSame(RequestStatus::Completed, $request->refresh()->status);
         $this->assertSame(OrderStatus::Completed, $request->order->refresh()->status);
@@ -83,17 +98,19 @@ class CoinLifecycleTest extends TestCase
     {
         $request = $this->requestAwaiting(
             orderOverrides: ['coin_txn_ref' => 'txn-456'],
-            versionOverrides: ['max_get_attempts' => 1],
+            versionOverrides: ['max_get_attempts' => 0],
         );
 
         $client = Mockery::mock(ExternalServiceClient::class);
-        $client->shouldReceive('poll')->once()->andReturn(null);
+        $client->shouldNotReceive('poll');
+        $this->app->instance(ExternalServiceClient::class, $client);
 
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldReceive('refund')->once()->with('txn-456');
         $coins->shouldNotReceive('settle');
+        $this->app->instance(CoinService::class, $coins);
 
-        (new PollRequestResult($request))->handle($client, $coins);
+        app(PollRequest::class)->handle($request);
 
         $this->assertSame(RequestStatus::Failed, $request->refresh()->status);
         $this->assertSame(OrderStatus::Failed, $request->order->refresh()->status);
@@ -113,12 +130,14 @@ class CoinLifecycleTest extends TestCase
             [new ExternalResultItem(resultNumber: 1, type: 'text', text: 'done')],
             latencyMs: 500,
         ));
+        $this->app->instance(ExternalServiceClient::class, $client);
 
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldNotReceive('settle');
         $coins->shouldNotReceive('refund');
+        $this->app->instance(CoinService::class, $coins);
 
-        (new PollRequestResult($request))->handle($client, $coins);
+        app(PollRequest::class)->handle($request);
 
         $this->assertSame(OrderStatus::Completed, $request->order->refresh()->status);
     }

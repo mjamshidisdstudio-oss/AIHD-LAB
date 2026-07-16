@@ -15,18 +15,23 @@ use App\Models\Result;
 use App\Models\ServiceOutput;
 use App\Support\External\ExternalResultItem;
 use App\Support\Ingest\IngestOutcome;
-use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /**
  * THE SINGLE DOOR. Both the webhook path and the poll sweep persist results
  * only through here — nothing writes to `results` directly.
  *
- * Idempotency rests on the UNIQUE(request_id, result_number) key: a new result
- * inserts; a duplicate delivery hits the unique constraint and becomes a no-op
- * (no second row, no exception surfaced, no downstream side effects). Media is
- * only copied for a genuinely new result, so a duplicate never touches storage.
+ * Idempotency is a genuine UPSERT against UNIQUE(request_id, result_number),
+ * not a select-then-insert (which races between the check and the write). The
+ * ON DUPLICATE KEY clause re-assigns result_number to itself — a column that is
+ * by definition already equal on a conflict — so it is a true no-op: a
+ * duplicate delivery never overwrites the original row's content. We tell new
+ * from duplicate by comparing the row's stored id against the id we proposed;
+ * that comparison reads data the upsert already committed, so it never races
+ * either. Media is only copied for a genuinely new result, so a duplicate
+ * never touches storage.
  *
  * An order completes only when its result count reaches its version's declared
  * output count — checked under a row lock so the completion transition (and the
@@ -39,19 +44,30 @@ class IngestResult
 
     public function handle(Request $request, ExternalResultItem $item, ResultSource $source, int $latencyMs): IngestOutcome
     {
-        // Insert the result first (media attached afterwards) so a duplicate is
-        // caught before any file is written — no orphaned storage objects.
-        try {
-            $result = Result::create([
+        $candidateId = (string) Str::uuid();
+
+        DB::table('results')->upsert([
+            [
+                'id' => $candidateId,
                 'request_id' => $request->id,
                 'result_number' => $item->resultNumber,
                 'type' => $item->type,
                 'file_id' => null,
                 'text_value' => $item->text,
-                'source' => $source,
+                'source' => $source->value,
                 'latency_ms' => $latencyMs,
-            ]);
-        } catch (UniqueConstraintViolationException) {
+                'received_at' => now(),
+            ],
+        ], ['request_id', 'result_number'], ['result_number']);
+
+        $stored = Result::query()
+            ->where('request_id', $request->id)
+            ->where('result_number', $item->resultNumber)
+            ->first();
+
+        // The upsert hit an existing row (someone else's id survived) — the
+        // classic UPSERT tell for "this was already there."
+        if ($stored === null || $stored->id !== $candidateId) {
             return IngestOutcome::duplicate();
         }
 
@@ -68,7 +84,7 @@ class IngestResult
                 'size' => strlen((string) $item->bytes),
             ]);
 
-            $result->update(['file_id' => $file->id]);
+            $stored->update(['file_id' => $file->id]);
         }
 
         return IngestOutcome::ingested($this->completeIfAllResultsIn($request));
@@ -78,14 +94,16 @@ class IngestResult
      * Complete the order iff its results now cover every declared output, and
      * do it exactly once. The row lock serialises concurrent ingests so only the
      * caller that crosses the threshold sees the transition and fires settle +
-     * broadcast.
+     * broadcast. A terminal order — completed OR failed — never transitions
+     * again: a late result for an already-failed (and already-refunded) order
+     * must not resurrect it into completed and settle a second time.
      */
     private function completeIfAllResultsIn(Request $request): bool
     {
         $justCompleted = DB::transaction(function () use ($request) {
             $order = Order::query()->whereKey($request->order_id)->lockForUpdate()->first();
 
-            if ($order === null || $order->status === OrderStatus::Completed) {
+            if ($order === null || $order->status !== OrderStatus::Processing) {
                 return false;
             }
 

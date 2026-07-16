@@ -18,6 +18,7 @@ use App\Models\ServiceInput;
 use App\Models\ServiceOutput;
 use App\Models\ServiceVersion;
 use App\Services\Coins\MockCoinService;
+use App\Services\Ingest\PollRequest;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
@@ -97,7 +98,7 @@ class WalkingSkeletonTest extends TestCase
         $this->assertSame('ext-1', $request->external_order_id);
 
         // 3. Poll -> completed, results persisted.
-        (new PollRequestResult($request))->handle(app(ExternalServiceClient::class), app(CoinService::class));
+        app(PollRequest::class)->handle($request);
         $request->refresh();
         $order->refresh();
         $this->assertSame(RequestStatus::Completed, $request->status);
