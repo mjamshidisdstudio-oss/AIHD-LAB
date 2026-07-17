@@ -7,6 +7,9 @@ use App\Enums\FailureStage;
 use App\Enums\RequestStatus;
 use App\Enums\ResultSource;
 use App\Models\Request;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Poll one request's external order and route any results through the single
@@ -39,7 +42,22 @@ class PollRequest
             return;
         }
 
-        $result = $this->client->poll($version, (string) $request->external_order_id);
+        try {
+            $result = $this->client->poll($version, (string) $request->external_order_id);
+        } catch (ConnectionException|RequestException $e) {
+            // Still counts toward the attempt budget above -- a
+            // permanently-unreachable service must converge to Timeout on a
+            // later call, never poll forever because every attempt throws
+            // before get_poll_count ever advances.
+            Log::warning('PollRequest: poll() failed.', ['request_id' => $request->id, 'error' => $e->getMessage()]);
+            $request->update([
+                'status' => RequestStatus::Polling,
+                'get_poll_count' => $request->get_poll_count + 1,
+                'last_polled_at' => now(),
+            ]);
+
+            return;
+        }
 
         $request->update([
             'status' => RequestStatus::Polling,
