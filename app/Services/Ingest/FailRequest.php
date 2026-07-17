@@ -4,6 +4,7 @@ namespace App\Services\Ingest;
 
 use App\Contracts\CoinService;
 use App\Enums\FailureStage;
+use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
 use App\Enums\ServiceStatus;
@@ -18,7 +19,8 @@ use Illuminate\Support\Facades\DB;
  *
  * A third consecutive failure auto-disables the service; a later success resets
  * the counter (IngestResult), and re-enabling the status is Phase 2's publish
- * concern (H2).
+ * concern (H2). Admin-preview orders never carry a strike: an operator poking
+ * at a draft's live preview must not be able to auto-disable the service.
  */
 class FailRequest
 {
@@ -58,6 +60,10 @@ class FailRequest
 
         if ($order->coin_txn_ref !== null) {
             $this->coins->refund($order->coin_txn_ref);
+        }
+
+        if ($order->source === OrderSource::AdminPreview) {
+            return;
         }
 
         $service = $order->service;

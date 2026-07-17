@@ -152,6 +152,45 @@ class SubmitOrderTest extends TestCase
         $this->assertNull($order->coin_txn_ref);
     }
 
+    /**
+     * Never Again: admin preview is the one caller allowed to run a draft
+     * version explicitly — the whole point is to exercise it before it is
+     * ever published. A real (site) order against the same draft must still
+     * be rejected.
+     */
+    public function test_admin_preview_can_run_an_explicit_draft_version(): void
+    {
+        Queue::fake();
+        $this->app->instance(CoinService::class, new MockCoinService);
+
+        $service = Service::factory()->create();
+        $draft = ServiceVersion::factory()->draft()->create(['service_id' => $service->id, 'version_no' => 1]);
+        ServiceInput::factory()->ofType(ServiceInputType::Text)->create([
+            'service_version_id' => $draft->id,
+            'slug' => 'prompt',
+        ]);
+        ServiceOutput::factory()->create([
+            'service_version_id' => $draft->id,
+            'result_number' => 1,
+            'type' => ServiceOutputType::Text,
+        ]);
+
+        $order = app(SubmitOrder::class)->handle(
+            $service,
+            'admin:1',
+            ['prompt' => 'try the draft'],
+            [],
+            ['source' => OrderSource::AdminPreview],
+            $draft,
+        );
+
+        $this->assertSame($draft->id, $order->service_version_id);
+        $this->assertSame(0, $order->coins_charged);
+
+        $this->expectException(ServiceUnavailableForOrdersException::class);
+        app(SubmitOrder::class)->handle($service, 'user-1', ['prompt' => 'x'], [], [], $draft);
+    }
+
     public function test_submitting_a_service_with_no_published_version_is_rejected(): void
     {
         $this->app->instance(CoinService::class, new MockCoinService);

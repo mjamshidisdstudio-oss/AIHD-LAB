@@ -40,6 +40,10 @@ class ServiceResource extends JsonResource
             'trending_rank' => $this->trending_rank,
             'current_version' => ServiceVersionResource::make($this->whenLoaded('currentVersion')),
             'versions' => ServiceVersionResource::collection($this->whenLoaded('versions')),
+            // Cheap summary counts for the admin List screen's cards — only
+            // present when the controller opted into loading them.
+            'versions_count' => $this->when(isset($this->versions_count), fn () => (int) $this->versions_count),
+            'item_count' => $this->whenLoaded('currentVersion', fn () => $this->currentVersion?->inputs?->count() ?? 0),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

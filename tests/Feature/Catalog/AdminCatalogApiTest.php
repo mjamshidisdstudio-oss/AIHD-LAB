@@ -41,6 +41,22 @@ class AdminCatalogApiTest extends TestCase
 
     // ---- services -----------------------------------------------------------
 
+    public function test_service_list_exposes_versions_count_and_item_count_for_the_list_screen(): void
+    {
+        $this->actingAsAdmin();
+        $service = Service::factory()->create();
+        $v1 = ServiceVersion::factory()->create(['service_id' => $service->id, 'version_no' => 1]);
+        ServiceVersion::factory()->create(['service_id' => $service->id, 'version_no' => 2]);
+        ServiceInput::factory()->count(3)->create(['service_version_id' => $v1->id]);
+        $service->update(['current_version_id' => $v1->id]);
+
+        $response = $this->getJson('/api/admin/services')->assertOk();
+        $row = collect($response->json('data'))->firstWhere('id', $service->id);
+
+        $this->assertSame(2, $row['versions_count']);
+        $this->assertSame(3, $row['item_count']);
+    }
+
     public function test_admin_can_create_a_service_with_an_initial_draft_version(): void
     {
         $this->actingAsAdmin();

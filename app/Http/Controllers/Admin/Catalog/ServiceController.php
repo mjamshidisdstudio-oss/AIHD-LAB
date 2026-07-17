@@ -16,7 +16,11 @@ class ServiceController extends Controller
     public function index(): AnonymousResourceCollection
     {
         return ServiceResource::collection(
-            Service::query()->latest()->paginate()
+            Service::query()
+                ->withCount('versions')
+                ->with('currentVersion.inputs')
+                ->latest()
+                ->paginate()
         );
     }
 
