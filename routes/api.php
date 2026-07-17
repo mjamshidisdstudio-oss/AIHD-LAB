@@ -58,7 +58,7 @@ Route::post('storage', [StorageController::class, 'store'])->name('storage.store
 |
 */
 Route::middleware('auth.core')->group(function () {
-    Route::post('orders', [OrderController::class, 'store'])->name('orders.store');
+    Route::post('orders', [OrderController::class, 'store'])->middleware('throttle:submit-order')->name('orders.store');
     Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show');
 });
 
@@ -77,14 +77,14 @@ Route::middleware('auth.core')->prefix('marketplace')->name('marketplace.')->gro
     Route::get('services', [CatalogController::class, 'index'])->name('services.index');
     Route::get('services/{service:slug}', [CatalogController::class, 'show'])->name('services.show');
 
-    Route::post('services/{service}/vote', [VoteController::class, 'store'])->name('services.vote');
+    Route::post('services/{service}/vote', [VoteController::class, 'store'])->middleware('throttle:vote')->name('services.vote');
     Route::post('services/{service}/bookmark', [BookmarkController::class, 'store'])->name('services.bookmark');
     Route::post('services/{service}/external-click', [InteractionController::class, 'externalClick'])->name('services.external-click');
 
     Route::get('services/{service}/comments', [CommentController::class, 'index'])->name('services.comments.index');
-    Route::post('services/{service}/comments', [CommentController::class, 'store'])->name('services.comments.store');
+    Route::post('services/{service}/comments', [CommentController::class, 'store'])->middleware('throttle:comment')->name('services.comments.store');
 
-    Route::get('results/{result}/download', [DownloadController::class, 'show'])->name('results.download');
+    Route::get('results/{result}/download', [DownloadController::class, 'show'])->middleware('throttle:download')->name('results.download');
 
     // Bridges core-token identity into Laravel's broadcasting auth flow so
     // Echo can subscribe to a private orders.{userRef} channel — see

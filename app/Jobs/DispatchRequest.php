@@ -3,15 +3,20 @@
 namespace App\Jobs;
 
 use App\Contracts\ExternalServiceClient;
+use App\Enums\FailureStage;
 use App\Enums\OrderSource;
 use App\Enums\RequestStatus;
 use App\Models\Order;
 use App\Models\Request;
 use App\Models\Service;
 use App\Models\ServiceVersion;
+use App\Services\Ingest\FailRequest;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Send a queued request to its service's external provider.
@@ -68,8 +73,19 @@ class DispatchRequest implements ShouldQueue
             return;
         }
 
-        // Admitted (status is now `sent`). Submit OUTSIDE the lock.
-        $externalOrderId = $client->submit($version, $this->buildPayload($order, $version));
+        // Admitted (status is now `sent`). Submit OUTSIDE the lock. A
+        // connection failure or non-2xx response (Http::throw()) must never
+        // leave the request stuck at `sent` forever with coins deducted and
+        // nothing to ever refund them -- route it through the same
+        // fail/refund/strike path as any other failure.
+        try {
+            $externalOrderId = $client->submit($version, $this->buildPayload($order, $version));
+        } catch (ConnectionException|RequestException $e) {
+            Log::warning('DispatchRequest: submit() failed.', ['request_id' => $request->id, 'error' => $e->getMessage()]);
+            app(FailRequest::class)->handle($request, FailureStage::Post);
+
+            return;
+        }
 
         $request->update([
             'status' => RequestStatus::Awaiting,

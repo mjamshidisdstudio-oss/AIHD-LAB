@@ -9,7 +9,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Route;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -34,9 +34,14 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         // Authenticate before route-model binding resolves {order}, so a
         // missing/invalid token is rejected as 401 rather than leaking a 404
-        // for an order that may or may not exist.
+        // for an order that may or may not exist. Also before ThrottleRequests
+        // (which sits ahead of SubstituteBindings in the framework's default
+        // priority list) -- the public rate limiters key by userRef(), which
+        // this middleware is what actually populates; running after it would
+        // silently fall back to IP-keyed throttling for every authenticated
+        // request.
         $middleware->prependToPriorityList(
-            before: SubstituteBindings::class,
+            before: ThrottleRequests::class,
             prepend: AuthenticateWithCoreToken::class,
         );
     })
