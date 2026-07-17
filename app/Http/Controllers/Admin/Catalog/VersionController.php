@@ -8,6 +8,7 @@ use App\Actions\Catalog\PublishVersion;
 use App\Actions\Catalog\RetireVersion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Catalog\StoreVersionRequest;
+use App\Http\Requests\Catalog\UpdateVersionLabelRequest;
 use App\Http\Requests\Catalog\UpdateVersionRequest;
 use App\Http\Resources\ServiceVersionResource;
 use App\Models\Service;
@@ -45,6 +46,18 @@ class VersionController extends Controller
     {
         // A published/retired version's configuration is frozen.
         $version->ensureEditable();
+        $version->update($request->validated());
+
+        return ServiceVersionResource::make($version->refresh());
+    }
+
+    /**
+     * A version's label is bookkeeping metadata, not frozen configuration --
+     * renaming works regardless of draft/published/retired status, unlike
+     * update() above which guards on ensureEditable().
+     */
+    public function updateLabel(UpdateVersionLabelRequest $request, ServiceVersion $version): ServiceVersionResource
+    {
         $version->update($request->validated());
 
         return ServiceVersionResource::make($version->refresh());

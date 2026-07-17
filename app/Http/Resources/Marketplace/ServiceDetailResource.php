@@ -13,10 +13,8 @@ use Illuminate\Support\Collection;
  * version's form/output/waiting-text structure, the discussion thread, and a
  * same-category "similar services" rail.
  *
- * The schema has a single `description` column — it serves both the grid
- * card's short tagline and this page's long "About" copy (see PR notes for
- * why: the design mocks a separate short/long pair that isn't backed by two
- * real columns).
+ * `description` is the long "About" copy; `tagline` (on the card) is now its
+ * own column, falling back to `description` when unset.
  *
  * comments/similar are provided by the controller as plain collections (not
  * Eloquent relations of Service), passed in via the constructor.
@@ -46,6 +44,9 @@ class ServiceDetailResource extends JsonResource
             ServiceCardResource::make($this->resource)->toArray($request),
             [
                 'description' => $this->description,
+                'gallery' => $this->gallery ?? [],
+                'before_image_url' => $this->before_image_url,
+                'after_image_url' => $this->after_image_url,
                 'version' => ServiceVersionResource::make($this->whenLoaded('currentVersion')),
                 'comment_count' => $this->comments->reduce(
                     fn (int $carry, $comment) => $carry + 1 + $comment->replies->count(),

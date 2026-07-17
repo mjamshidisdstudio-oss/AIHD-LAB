@@ -107,4 +107,64 @@ class CatalogApiTest extends TestCase
             ->getJson("/api/marketplace/services/{$paused->slug}")
             ->assertNotFound();
     }
+
+    /**
+     * Never Again: a service without a tagline must fall back to its
+     * description (preserves pre-Phase-8.1 behavior) -- setting a tagline
+     * must override that fallback, not sit alongside it.
+     */
+    public function test_card_tagline_falls_back_to_description_when_unset(): void
+    {
+        $withoutTagline = Service::factory()->create([
+            'status' => ServiceStatus::Active,
+            'description' => 'A full description with no tagline set.',
+            'tagline' => null,
+        ]);
+        $withTagline = Service::factory()->create([
+            'status' => ServiceStatus::Active,
+            'description' => 'A full description that should not show on the card.',
+            'tagline' => 'A punchy hook',
+        ]);
+
+        $response = $this->withHeaders($this->coreUserHeaders('user-1'))
+            ->getJson('/api/marketplace/services')
+            ->assertOk();
+
+        $cards = collect($response->json('data'));
+        $this->assertSame(
+            'A full description with no tagline set.',
+            $cards->firstWhere('id', $withoutTagline->id)['tagline'],
+        );
+        $this->assertSame('A punchy hook', $cards->firstWhere('id', $withTagline->id)['tagline']);
+    }
+
+    public function test_detail_exposes_gallery_and_before_after_images(): void
+    {
+        $service = Service::factory()->create([
+            'status' => ServiceStatus::Active,
+            'gallery' => ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
+            'before_image_url' => 'https://example.com/before.jpg',
+            'after_image_url' => 'https://example.com/after.jpg',
+        ]);
+        $this->publish(ServiceVersion::factory()->draft()->create(['service_id' => $service->id, 'version_no' => 1]));
+
+        $response = $this->withHeaders($this->coreUserHeaders('user-1'))
+            ->getJson("/api/marketplace/services/{$service->slug}")
+            ->assertOk();
+
+        $response->assertJsonPath('data.gallery', ['https://example.com/1.jpg', 'https://example.com/2.jpg']);
+        $response->assertJsonPath('data.before_image_url', 'https://example.com/before.jpg');
+        $response->assertJsonPath('data.after_image_url', 'https://example.com/after.jpg');
+    }
+
+    public function test_detail_gallery_defaults_to_empty_array_when_unset(): void
+    {
+        $service = Service::factory()->create(['status' => ServiceStatus::Active, 'gallery' => null]);
+        $this->publish(ServiceVersion::factory()->draft()->create(['service_id' => $service->id, 'version_no' => 1]));
+
+        $this->withHeaders($this->coreUserHeaders('user-1'))
+            ->getJson("/api/marketplace/services/{$service->slug}")
+            ->assertOk()
+            ->assertJsonPath('data.gallery', []);
+    }
 }

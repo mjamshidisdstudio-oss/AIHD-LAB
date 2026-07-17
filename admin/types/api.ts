@@ -23,7 +23,11 @@ export interface Service {
   slug: string
   name: string
   description: string | null
+  tagline: string | null
   image_url: string | null
+  gallery: string[]
+  before_image_url: string | null
+  after_image_url: string | null
   kind: ServiceKind
   external_url: string | null
   category: string
@@ -48,6 +52,7 @@ export interface ServiceVersion {
   id: string
   service_id: string
   version_no: number
+  label: string | null
   status: ServiceVersionStatus
   coin_cost: number
   regenerate_limit: number
