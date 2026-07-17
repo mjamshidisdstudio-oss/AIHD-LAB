@@ -103,12 +103,30 @@ function postReply(parentId: string) {
 
         <div class="mb-[22px] flex gap-1.5 overflow-x-auto border-b border-[#ECEEF1]">
           <a href="#d-overview" class="whitespace-nowrap border-b-2 border-[#5639E5] px-[15px] py-[11px] text-[13.5px] font-bold text-[#19191A]">About</a>
+          <a v-if="service.gallery.length > 0" href="#d-gallery" class="whitespace-nowrap border-b-2 border-transparent px-[15px] py-[11px] text-[13.5px] font-semibold text-[#7D7E80]">Gallery</a>
+          <a v-if="service.before_image_url && service.after_image_url" href="#d-beforeafter" class="whitespace-nowrap border-b-2 border-transparent px-[15px] py-[11px] text-[13.5px] font-semibold text-[#7D7E80]">Before &amp; after</a>
           <a href="#d-reviews" class="whitespace-nowrap border-b-2 border-transparent px-[15px] py-[11px] text-[13.5px] font-semibold text-[#7D7E80]">Reviews</a>
         </div>
 
         <section id="d-overview" class="mb-[34px]">
           <h2 class="mb-3 text-lg font-extrabold">About this service</h2>
           <p class="text-[15px] leading-loose text-[#4B4C4D]">{{ service.description }}</p>
+        </section>
+
+        <div v-if="service.gallery.length > 0" id="d-gallery" class="mb-[34px] grid grid-cols-3 gap-3">
+          <div v-for="(src, i) in service.gallery" :key="i" class="aspect-square overflow-hidden rounded-[14px] bg-[#EEF0F4] bg-cover bg-center" :style="{ backgroundImage: `url(${src})` }" />
+        </div>
+
+        <section v-if="service.before_image_url && service.after_image_url" id="d-beforeafter" class="mb-[34px]">
+          <h2 class="mb-3.5 text-lg font-extrabold">Before &amp; after</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-[#EEF0F4] bg-cover bg-center" :style="{ backgroundImage: `url(${service.before_image_url})` }">
+              <div class="absolute left-3 top-3 rounded-full bg-[rgba(25,25,26,.72)] px-[13px] py-[5px] text-xs font-bold text-white">Before</div>
+            </div>
+            <div class="relative aspect-[4/3] overflow-hidden rounded-[14px] bg-[#EEF0F4] bg-cover bg-center" :style="{ backgroundImage: `url(${service.after_image_url})` }">
+              <div class="absolute left-3 top-3 rounded-full bg-[#5639E5] px-[13px] py-[5px] text-xs font-bold text-white">After</div>
+            </div>
+          </div>
         </section>
 
         <section id="d-reviews">

@@ -92,6 +92,9 @@ export interface ServiceComment {
 
 export interface ServiceDetail extends ServiceCard {
   description: string | null
+  gallery: string[]
+  before_image_url: string | null
+  after_image_url: string | null
   version: ServiceVersion
   comment_count: number
   comments: ServiceComment[]
