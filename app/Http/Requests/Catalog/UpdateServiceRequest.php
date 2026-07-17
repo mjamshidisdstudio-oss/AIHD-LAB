@@ -21,7 +21,12 @@ class UpdateServiceRequest extends FormRequest
         return [
             'name' => ['sometimes', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
+            'tagline' => ['sometimes', 'nullable', 'string', 'max:255'],
             'image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'gallery' => ['sometimes', 'nullable', 'array'],
+            'gallery.*' => ['string', 'url', 'max:2048'],
+            'before_image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
+            'after_image_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             'category' => ['sometimes', 'string', 'max:255'],
             'external_url' => ['sometimes', 'nullable', 'url', 'max:2048'],
             // Accepted as pasted and re-hashed by the model cast on save. Never

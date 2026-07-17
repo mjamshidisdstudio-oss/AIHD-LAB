@@ -19,6 +19,7 @@ class ServiceVersion extends Model
     protected $fillable = [
         'service_id',
         'version_no',
+        'label',
         'status',
         'coin_cost',
         'regenerate_limit',

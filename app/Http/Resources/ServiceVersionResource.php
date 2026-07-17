@@ -20,6 +20,7 @@ class ServiceVersionResource extends JsonResource
             'id' => $this->id,
             'service_id' => $this->service_id,
             'version_no' => $this->version_no,
+            'label' => $this->label,
             'status' => $this->status,
             'coin_cost' => $this->coin_cost,
             'regenerate_limit' => $this->regenerate_limit,

@@ -78,6 +78,38 @@ class AdminCatalogApiTest extends TestCase
         $response->assertJsonMissingPath('data.service_secret');
     }
 
+    public function test_admin_can_set_tagline_gallery_and_before_after_images(): void
+    {
+        $this->actingAsAdmin();
+        $service = Service::factory()->create();
+
+        $this->patchJson("/api/admin/services/{$service->id}", [
+            'tagline' => 'Redecorate any room in seconds',
+            'gallery' => ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
+            'before_image_url' => 'https://example.com/before.jpg',
+            'after_image_url' => 'https://example.com/after.jpg',
+        ])->assertOk()
+            ->assertJsonPath('data.tagline', 'Redecorate any room in seconds')
+            ->assertJsonPath('data.gallery', ['https://example.com/1.jpg', 'https://example.com/2.jpg'])
+            ->assertJsonPath('data.before_image_url', 'https://example.com/before.jpg')
+            ->assertJsonPath('data.after_image_url', 'https://example.com/after.jpg');
+
+        $this->assertSame(
+            ['https://example.com/1.jpg', 'https://example.com/2.jpg'],
+            $service->refresh()->gallery,
+        );
+    }
+
+    public function test_gallery_rejects_non_url_entries(): void
+    {
+        $this->actingAsAdmin();
+        $service = Service::factory()->create();
+
+        $this->patchJson("/api/admin/services/{$service->id}", [
+            'gallery' => ['not-a-url'],
+        ])->assertStatus(422)->assertJsonValidationErrors(['gallery.0']);
+    }
+
     public function test_create_service_requires_valid_input(): void
     {
         $this->actingAsAdmin();
@@ -182,6 +214,43 @@ class AdminCatalogApiTest extends TestCase
 
         $this->assertSame('retired', $v1->refresh()->status->value);
         $this->assertSame($v2->id, $service->refresh()->current_version_id);
+    }
+
+    /**
+     * Never Again: a version's label is bookkeeping metadata, not frozen
+     * configuration -- renaming must succeed regardless of draft, published,
+     * or retired status, unlike every other version-content edit.
+     */
+    public function test_version_label_can_be_renamed_regardless_of_status(): void
+    {
+        $this->actingAsAdmin();
+        $service = Service::factory()->create();
+        $draft = ServiceVersion::factory()->draft()->create(['service_id' => $service->id, 'version_no' => 1]);
+        $published = ServiceVersion::factory()->create(['service_id' => $service->id, 'version_no' => 2]);
+        app(PublishVersion::class)->handle($published);
+        $retired = ServiceVersion::factory()->retired()->create(['service_id' => $service->id, 'version_no' => 3]);
+
+        foreach ([$draft, $published, $retired] as $version) {
+            $this->patchJson("/api/admin/versions/{$version->id}/label", ['label' => "renamed {$version->version_no}"])
+                ->assertOk()
+                ->assertJsonPath('data.label', "renamed {$version->version_no}");
+            $this->assertSame("renamed {$version->version_no}", $version->refresh()->label);
+        }
+    }
+
+    public function test_version_label_rename_does_not_touch_frozen_configuration(): void
+    {
+        $this->actingAsAdmin();
+        $service = Service::factory()->create();
+        $version = ServiceVersion::factory()->create(['service_id' => $service->id, 'version_no' => 1, 'post_url' => 'https://original.test']);
+        app(PublishVersion::class)->handle($version);
+
+        $this->patchJson("/api/admin/versions/{$version->id}/label", ['label' => 'v1 - stable'])->assertOk();
+
+        $version->refresh();
+        $this->assertSame('v1 - stable', $version->label);
+        $this->assertSame('https://original.test', $version->post_url);
+        $this->assertSame('published', $version->status->value);
     }
 
     // ---- editing guard via the API -----------------------------------------

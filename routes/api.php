@@ -122,6 +122,7 @@ Route::middleware(['auth:sanctum', 'can:manage-catalog'])
 
         Route::get('versions/{version}', [VersionController::class, 'show'])->name('versions.show');
         Route::patch('versions/{version}', [VersionController::class, 'update'])->name('versions.update');
+        Route::patch('versions/{version}/label', [VersionController::class, 'updateLabel'])->name('versions.label.update');
         Route::delete('versions/{version}', [VersionController::class, 'destroy'])->name('versions.destroy');
         Route::post('versions/{version}/duplicate', [VersionController::class, 'duplicate'])->name('versions.duplicate');
         Route::post('versions/{version}/publish', [VersionController::class, 'publish'])->name('versions.publish');

@@ -30,7 +30,10 @@ class ServiceCardResource extends JsonResource
             'id' => $this->id,
             'slug' => $this->slug,
             'name' => $this->name,
-            'tagline' => $this->description,
+            // Falls back to the full description when no tagline is set --
+            // preserves existing behavior for services that predate this
+            // column, rather than a new (and possibly awkward) truncation.
+            'tagline' => $this->tagline ?? $this->description,
             'image_url' => $this->image_url,
             'kind' => $this->kind,
             'external_url' => $this->external_url,
