@@ -1,0 +1,15 @@
+{
+  "name": "fast",
+  "description": "Small timeouts/intervals -- whole suite in minutes, used for nightly + manual runs.",
+  "mockService": {
+    "port": 4100,
+    "processingDelayMs": 500,
+    "slowDelayMs": 5000
+  },
+  "version": {
+    "responseTimeoutS": 3,
+    "getIntervalS": 1,
+    "maxGetAttempts": 2
+  },
+  "phpWorkers": 4
+}

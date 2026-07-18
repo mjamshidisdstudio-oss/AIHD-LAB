@@ -1,0 +1,13 @@
+{
+  "name": "aihd-lab-acceptance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full end-to-end acceptance suite for AIHD-LAB -- real browser, real external mock service.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "dependencies": {
+    "playwright": "^1.48.0"
+  }
+}
