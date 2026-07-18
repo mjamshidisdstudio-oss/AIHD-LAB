@@ -60,7 +60,7 @@ async function run({ config, report, group, laravelEnv, root }) {
   // the sweep to happen -- deterministic control over timing, not a shortcut
   // around the real mechanism.
   ctx.runArtisan = (args) => {
-    execSync(`php artisan ${args}`, { cwd: root, env: laravelEnv, stdio: 'pipe' });
+    return execSync(`php artisan ${args}`, { cwd: root, env: laravelEnv, stdio: 'pipe' }).toString();
   };
 
   try {

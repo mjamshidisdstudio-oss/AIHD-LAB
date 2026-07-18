@@ -243,6 +243,7 @@ async function run(ctx, report) {
     const parsed = JSON.parse(receipt.raw_body);
     assert.ok(parsed.result_number, 'expected the stored raw_body to be the real (if rejected) result payload');
     assert.strictEqual(receipt.request_id, null, 'a rejected-at-signature delivery never resolves to a request');
+    ctx.state.part3InvalidSignatureDeliveryId = receipt.id;
 
     // Hygiene: the underlying job is done processing regardless of mode --
     // sweep it to a clean terminal state so it doesn't linger against this
@@ -260,6 +261,8 @@ async function run(ctx, report) {
     const receipt = await waitForWebhookReceipt(ctx, serviceId, 'validation_error');
     assert.ok(receipt, 'expected a validation_error webhook receipt to be recorded');
     assert.strictEqual(receipt.raw_body, raw, 'expected the exact malformed bytes to be stored verbatim');
+    ctx.state.part3MalformedBody = raw;
+    ctx.state.part3MalformedDeliveryId = receipt.id;
   });
 
   await report.step(26, 'UNKNOWN external_order_id: receipt with outcome=unknown_order, rejected', async () => {

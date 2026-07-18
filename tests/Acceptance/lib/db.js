@@ -42,4 +42,20 @@ function queryScalar(sql) {
   return trimmed === '' ? null : trimmed;
 }
 
-module.exports = { queryScalar };
+/**
+ * Like queryScalar, but for a single-column, multi-row query -- returns the
+ * first column of every returned row. Used to independently derive expected
+ * ID sets (e.g. "every order for this service with source=site") so a
+ * filtered admin API response can be compared against real ground truth
+ * rather than a hand-counted total.
+ *
+ * @returns {string[]}
+ */
+function queryColumn(sql) {
+  const passwordArgs = PASSWORD ? [`-p${PASSWORD}`] : [];
+  const args = ['-h', HOST, '-P', String(PORT), '-u', USER, ...passwordArgs, '-N', '-B', DB_NAME, '-e', sql];
+  const out = execFileSync('mysql', args, { encoding: 'utf8' });
+  return out.split('\n').map((line) => line.trim()).filter((line) => line !== '');
+}
+
+module.exports = { queryScalar, queryColumn };
