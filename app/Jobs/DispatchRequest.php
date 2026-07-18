@@ -40,7 +40,12 @@ class DispatchRequest implements ShouldQueue
 
     public function handle(ExternalServiceClient $client): void
     {
-        $request = $this->request->fresh(['order.service', 'order.version.outputs', 'order.inputs']);
+        $request = $this->request->fresh([
+            'order.service',
+            'order.version.outputs',
+            'order.inputs.input',
+            'order.inputs.attachedFiles',
+        ]);
 
         if ($request === null) {
             return;
@@ -146,9 +151,24 @@ class DispatchRequest implements ShouldQueue
             'order_id' => $order->id,
             'inputs' => $order->inputs->map(fn ($input) => [
                 'input_id' => $input->input_id,
+                'slug' => $input->input?->slug,
                 'value_text' => $input->value_text,
                 'value_bool' => $input->value_bool,
             ])->all(),
+            // A media-bearing (image/video) input's actual file never has a
+            // scalar value -- it lives in order_input_files instead, so it's
+            // surfaced here rather than folded into 'inputs' above. Without
+            // this, a genuinely external provider has no way to resolve which
+            // media_id to fetch via GET /storage/{media_id} for an order.
+            'media_ids' => $order->inputs
+                ->flatMap(fn ($input) => $input->attachedFiles->map(fn ($file) => [
+                    'input_id' => $input->input_id,
+                    'slug' => $input->input?->slug,
+                    'media_id' => $file->id,
+                    'position' => $file->pivot->position,
+                ]))
+                ->values()
+                ->all(),
             'expected_outputs' => $version->outputs->map(fn ($output) => [
                 'result_number' => $output->result_number,
                 'type' => $output->type->value,
