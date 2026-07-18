@@ -8,6 +8,7 @@ use App\Enums\FailureStage;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
 use App\Enums\ServiceOutputType;
+use App\Exceptions\External\ExternalServiceReportedFailureException;
 use App\Jobs\DispatchRequest;
 use App\Models\Order;
 use App\Models\Request;
@@ -128,5 +129,54 @@ class OutboundCallFailureTest extends TestCase
 
         $this->assertSame(RequestStatus::Failed, $request->refresh()->status);
         $this->assertSame(FailureStage::Timeout, $request->failure_stage);
+    }
+
+    /**
+     * Never Again: FailureStage::Service existed only in tests that called
+     * FailRequest directly -- nothing in the real poll path could ever
+     * reach it, because poll() treated ANY non-"completed" status
+     * (including a provider explicitly reporting failure) as "still
+     * pending". An explicit failure report must fail the request
+     * IMMEDIATELY with FailureStage::Service, not be mistaken for "not done
+     * yet" and left to grind through the attempt budget toward a
+     * misleading Timeout.
+     */
+    public function test_poll_reported_failure_immediately_fails_with_service_stage(): void
+    {
+        $service = Service::factory()->create();
+        $version = ServiceVersion::factory()->create(['service_id' => $service->id, 'max_get_attempts' => 5]);
+        ServiceOutput::factory()->create([
+            'service_version_id' => $version->id,
+            'result_number' => 1,
+            'type' => ServiceOutputType::Text,
+        ]);
+        $order = Order::factory()->create([
+            'service_id' => $service->id,
+            'service_version_id' => $version->id,
+            'status' => OrderStatus::Processing,
+            'coin_txn_ref' => 'txn-reported-fail',
+        ]);
+        $request = Request::factory()->create([
+            'order_id' => $order->id,
+            'status' => RequestStatus::Awaiting,
+            'get_poll_count' => 0,
+        ]);
+
+        $client = Mockery::mock(ExternalServiceClient::class);
+        $client->shouldReceive('poll')->once()->andThrow(ExternalServiceReportedFailureException::reported('model unavailable'));
+        $this->app->instance(ExternalServiceClient::class, $client);
+
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldReceive('refund')->once()->with('txn-reported-fail');
+        $coins->shouldNotReceive('settle');
+        $this->app->instance(CoinService::class, $coins);
+
+        app(PollRequest::class)->handle($request);
+
+        $request->refresh();
+        $this->assertSame(RequestStatus::Failed, $request->status);
+        $this->assertSame(FailureStage::Service, $request->failure_stage);
+        $this->assertSame(OrderStatus::Failed, $order->refresh()->status);
+        $this->assertSame(1, $service->refresh()->consecutive_failures);
     }
 }

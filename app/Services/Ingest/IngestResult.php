@@ -44,6 +44,21 @@ class IngestResult
 
     public function handle(Request $request, ExternalResultItem $item, ResultSource $source, int $latencyMs): IngestOutcome
     {
+        $referencedFile = null;
+
+        if ($item->hasMediaReference()) {
+            $referencedFile = File::query()->find($item->mediaId);
+
+            // media_id is an opaque token, not a secret -- a provider (buggy or
+            // malicious) could name any file it can enumerate. Never link a
+            // result to a file that wasn't uploaded for THIS order; reject the
+            // whole delivery before it touches `results` at all, rather than
+            // silently dropping just the file reference.
+            if ($referencedFile === null || $referencedFile->order_id !== $request->order_id) {
+                return IngestOutcome::rejected('invalid_media_reference');
+            }
+        }
+
         $candidateId = (string) Str::uuid();
 
         DB::table('results')->upsert([
@@ -85,6 +100,10 @@ class IngestResult
             ]);
 
             $stored->update(['file_id' => $file->id]);
+        } elseif ($referencedFile !== null) {
+            // Already uploaded (and ownership-verified above) via POST
+            // /storage -- link directly, never re-store its bytes.
+            $stored->update(['file_id' => $referencedFile->id]);
         }
 
         return IngestOutcome::ingested($this->completeIfAllResultsIn($request));

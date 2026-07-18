@@ -18,4 +18,6 @@ enum WebhookOutcome: string
     case UnknownOrder = 'unknown_order';
     case StaleAttempt = 'stale_attempt';
     case ValidationError = 'validation_error';
+    case InvalidMediaReference = 'invalid_media_reference';
+    case FailureReported = 'failure_reported';
 }

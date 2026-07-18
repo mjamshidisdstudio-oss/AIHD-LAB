@@ -2,9 +2,17 @@
 
 namespace Tests\Feature\Ingest;
 
+use App\Contracts\CoinService;
+use App\Enums\FailureStage;
+use App\Enums\FileKind;
+use App\Enums\OrderStatus;
+use App\Enums\RequestStatus;
 use App\Enums\WebhookOutcome;
+use App\Models\File;
+use App\Models\Order;
 use App\Models\WebhookDelivery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\Concerns\BuildsIngestFixtures;
 use Tests\TestCase;
 
@@ -158,5 +166,100 @@ class WebhookControllerTest extends TestCase
 
         $this->assertSame(1, WebhookDelivery::where('outcome', WebhookOutcome::Ingested->value)->count());
         $this->assertSame(1, WebhookDelivery::where('outcome', WebhookOutcome::Duplicate->value)->count());
+    }
+
+    /**
+     * A result delivered by media_id reference (the pre-upload-then-reference
+     * path) is accepted and linked when the file was uploaded for this order.
+     */
+    public function test_a_media_id_delivery_for_this_orders_own_file_is_ingested(): void
+    {
+        ['service' => $service, 'request' => $request, 'order' => $order] = $this->ingestFixture(signingKey: 'sig-key');
+        $file = File::factory()->create(['order_id' => $order->id, 'kind' => FileKind::Result]);
+
+        $body = json_encode([
+            'external_order_id' => $request->external_order_id,
+            'result_number' => 1,
+            'type' => 'image',
+            'media_id' => $file->id,
+        ]);
+
+        $this->postRaw("/api/webhooks/{$service->id}/results", $body, [
+            'X-Signature' => $this->hmacFor($body, 'sig-key'),
+        ])->assertStatus(200)->assertJsonPath('outcome', 'ingested');
+
+        $this->assertDatabaseHas('results', ['request_id' => $request->id, 'result_number' => 1, 'file_id' => $file->id]);
+    }
+
+    /**
+     * Never Again: a media_id delivery is REJECTED, over HTTP, when the
+     * referenced file was uploaded for a different order. media_id is an
+     * opaque token, not a secret -- ownership must be verified server-side,
+     * not trusted from the caller.
+     */
+    public function test_a_media_id_delivery_referencing_another_orders_file_is_rejected(): void
+    {
+        ['service' => $service, 'request' => $request] = $this->ingestFixture(signingKey: 'sig-key');
+        $foreignFile = File::factory()->create(['order_id' => Order::factory()->create()->id, 'kind' => FileKind::Result]);
+
+        $body = json_encode([
+            'external_order_id' => $request->external_order_id,
+            'result_number' => 1,
+            'type' => 'image',
+            'media_id' => $foreignFile->id,
+        ]);
+
+        $response = $this->postRaw("/api/webhooks/{$service->id}/results", $body, [
+            'X-Signature' => $this->hmacFor($body, 'sig-key'),
+        ]);
+
+        $response->assertStatus(403)->assertJsonPath('outcome', 'invalid_media_reference');
+
+        $this->assertDatabaseHas('webhook_deliveries', [
+            'service_id' => $service->id,
+            'outcome' => WebhookOutcome::InvalidMediaReference->value,
+            'http_status' => 403,
+        ]);
+        $this->assertDatabaseMissing('results', ['request_id' => $request->id, 'result_number' => 1]);
+    }
+
+    /**
+     * Never Again: a provider reporting an explicit failure over the webhook
+     * (rather than a result) must fail the order with FailureStage::Service,
+     * refund coins, and record a strike -- the same as any other failure
+     * path -- not be rejected as validation_error for lacking a
+     * result_number/type it was never going to send.
+     */
+    public function test_a_failure_report_webhook_fails_the_order_with_service_stage(): void
+    {
+        ['service' => $service, 'request' => $request, 'order' => $order] = $this->ingestFixture(
+            signingKey: 'sig-key',
+            orderOverrides: ['coin_txn_ref' => 'txn-webhook-fail'],
+        );
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldReceive('refund')->once()->with('txn-webhook-fail');
+        $coins->shouldNotReceive('settle');
+        $this->app->instance(CoinService::class, $coins);
+
+        $body = json_encode([
+            'external_order_id' => $request->external_order_id,
+            'status' => 'failed',
+            'reason' => 'model unavailable',
+        ]);
+
+        $response = $this->postRaw("/api/webhooks/{$service->id}/results", $body, [
+            'X-Signature' => $this->hmacFor($body, 'sig-key'),
+        ]);
+
+        $response->assertStatus(200)->assertJsonPath('outcome', 'failure_reported');
+
+        $this->assertDatabaseHas('webhook_deliveries', [
+            'service_id' => $service->id,
+            'outcome' => WebhookOutcome::FailureReported->value,
+            'http_status' => 200,
+        ]);
+        $this->assertSame(RequestStatus::Failed, $request->refresh()->status);
+        $this->assertSame(FailureStage::Service, $request->failure_stage);
+        $this->assertSame(OrderStatus::Failed, $order->refresh()->status);
     }
 }

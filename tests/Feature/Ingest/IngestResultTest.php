@@ -4,10 +4,13 @@ namespace Tests\Feature\Ingest;
 
 use App\Contracts\CoinService;
 use App\Enums\FailureStage;
+use App\Enums\FileKind;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
 use App\Enums\ResultSource;
 use App\Events\OrderCompleted;
+use App\Models\File;
+use App\Models\Order;
 use App\Models\Result;
 use App\Services\Ingest\FailRequest;
 use App\Services\Ingest\IngestResult;
@@ -166,5 +169,74 @@ class IngestResultTest extends TestCase
         Event::assertNotDispatched(OrderCompleted::class);
         // Mockery verifies refund(1) + settle(0) total on tearDown — the late
         // webhook never triggers a second refund or a settle.
+    }
+
+    /**
+     * Never Again: a result delivered as a media_id reference (the
+     * pre-upload-then-reference path via POST /storage) must be REJECTED, not
+     * linked, when the referenced file was uploaded for a DIFFERENT order.
+     * Without this check, a provider (malicious or merely buggy) could make
+     * one customer's order resolve to another customer's uploaded photo just
+     * by naming its file id — media_id is otherwise an opaque, guessable-only
+     * -by-brute-force UUID, not a secret, so ownership must be checked, not
+     * assumed.
+     */
+    public function test_media_id_referencing_a_different_orders_file_is_rejected_not_linked(): void
+    {
+        Event::fake([OrderCompleted::class]);
+        ['request' => $request, 'order' => $order] = $this->ingestFixture(declaredOutputs: 1);
+
+        $otherOrder = Order::factory()->create();
+        $foreignFile = File::factory()->create(['order_id' => $otherOrder->id, 'kind' => FileKind::Result]);
+
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldNotReceive('settle');
+        $coins->shouldNotReceive('refund');
+
+        $outcome = (new IngestResult($coins))->handle(
+            $request,
+            new ExternalResultItem(resultNumber: 1, type: 'image', mediaId: $foreignFile->id),
+            ResultSource::Webhook,
+            100,
+        );
+
+        $this->assertTrue($outcome->wasRejected());
+        $this->assertFalse($outcome->wasIngested());
+        $this->assertSame(0, Result::where('request_id', $request->id)->count());
+        $this->assertSame(OrderStatus::Processing, $order->refresh()->status);
+        Event::assertNotDispatched(OrderCompleted::class);
+        // Mockery verifies settle(0) + refund(0) on tearDown — a rejected
+        // reference never touches coins either.
+    }
+
+    /**
+     * The happy path this security check protects: a media_id uploaded FOR
+     * THIS order (the real pre-upload-then-reference flow) links directly to
+     * the already-stored file — no bytes are re-written, no new File row is
+     * created for it.
+     */
+    public function test_valid_media_id_reference_links_the_existing_file_without_rewriting_it(): void
+    {
+        Event::fake([OrderCompleted::class]);
+        ['request' => $request, 'order' => $order] = $this->ingestFixture(
+            declaredOutputs: 1,
+            orderOverrides: ['coin_txn_ref' => 'txn-media-ref'],
+        );
+        $ownFile = File::factory()->create(['order_id' => $order->id, 'kind' => FileKind::Result]);
+
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldReceive('settle')->once()->with('txn-media-ref');
+
+        $outcome = (new IngestResult($coins))->handle(
+            $request,
+            new ExternalResultItem(resultNumber: 1, type: 'image', mediaId: $ownFile->id),
+            ResultSource::Webhook,
+            100,
+        );
+
+        $this->assertTrue($outcome->wasIngested());
+        $this->assertSame(1, File::where('order_id', $order->id)->count());
+        $this->assertDatabaseHas('results', ['request_id' => $request->id, 'result_number' => 1, 'file_id' => $ownFile->id]);
+        Event::assertDispatchedTimes(OrderCompleted::class, 1);
     }
 }

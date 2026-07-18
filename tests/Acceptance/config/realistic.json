@@ -1,0 +1,15 @@
+{
+  "name": "realistic",
+  "description": "Production-like response_timeout_s/get_interval_s/max_get_attempts, used before a release. Not the seeder's literal defaults (120/30/10) -- those would make the SLOW-mode timeout test alone take ~20 minutes; these values are still genuinely representative of real provider latencies while keeping the full run in the range of several minutes.",
+  "mockService": {
+    "port": 4100,
+    "processingDelayMs": 3000,
+    "slowDelayMs": 35000
+  },
+  "version": {
+    "responseTimeoutS": 30,
+    "getIntervalS": 10,
+    "maxGetAttempts": 3
+  },
+  "phpWorkers": 4
+}

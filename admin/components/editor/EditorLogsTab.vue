@@ -100,6 +100,8 @@ const OUTCOME_STYLE: Record<string, string> = {
   unknown_order: 'color:#D70D3E;background:#FDECEF',
   stale_attempt: 'color:#C9670C;background:#FFF1E0',
   validation_error: 'color:#D70D3E;background:#FDECEF',
+  invalid_media_reference: 'color:#D70D3E;background:#FDECEF',
+  failure_reported: 'color:#C9670C;background:#FFF1E0',
 }
 
 // ---- admin preview ----
@@ -228,6 +230,8 @@ async function downloadResult(resultId: string) {
             <option value="unknown_order">Unknown order</option>
             <option value="stale_attempt">Stale attempt</option>
             <option value="validation_error">Validation error</option>
+            <option value="invalid_media_reference">Invalid media reference</option>
+            <option value="failure_reported">Failure reported</option>
           </select>
           <input v-model="externalOrderIdFilter" placeholder="Search by external_order_id…" class="h-9 rounded-lg border border-[#DCE0E7] bg-white px-2 text-[12px]">
         </div>

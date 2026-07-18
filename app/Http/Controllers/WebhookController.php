@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\FailureStage;
 use App\Enums\ResultSource;
 use App\Enums\WebhookOutcome;
 use App\Models\Request as ServiceRequest;
 use App\Models\Service;
 use App\Models\WebhookDelivery;
+use App\Services\Ingest\FailRequest;
 use App\Services\Ingest\IngestResult;
 use App\Support\External\ExternalResultItem;
 use Illuminate\Http\JsonResponse;
@@ -22,7 +24,7 @@ use Illuminate\Http\Request;
  */
 class WebhookController extends Controller
 {
-    public function __construct(private IngestResult $ingest) {}
+    public function __construct(private IngestResult $ingest, private FailRequest $fail) {}
 
     public function results(Request $http, Service $service): JsonResponse
     {
@@ -40,6 +42,13 @@ class WebhookController extends Controller
         }
 
         $externalOrderId = is_string($data['external_order_id'] ?? null) ? $data['external_order_id'] : null;
+
+        // A failure report has no result_number/type -- it is never going to
+        // pass the value-bearing check below, and shouldn't be judged against it.
+        if ($externalOrderId !== null && ($data['status'] ?? null) === 'failed') {
+            return $this->recordFailureReport($service, $externalOrderId, $raw);
+        }
+
         $resultNumber = is_int($data['result_number'] ?? null) ? $data['result_number'] : null;
         $type = is_string($data['type'] ?? null) ? $data['type'] : null;
 
@@ -71,15 +80,49 @@ class WebhookController extends Controller
             is_int($data['latency_ms'] ?? null) ? $data['latency_ms'] : 0,
         );
 
+        $webhookOutcome = match (true) {
+            $outcome->wasRejected() => WebhookOutcome::InvalidMediaReference,
+            $outcome->duplicate => WebhookOutcome::Duplicate,
+            default => WebhookOutcome::Ingested,
+        };
+
         return $this->record(
             $service,
             $request,
             $externalOrderId,
             $resultNumber,
-            $outcome->duplicate ? WebhookOutcome::Duplicate : WebhookOutcome::Ingested,
-            200,
+            $webhookOutcome,
+            $outcome->wasRejected() ? 403 : 200,
             $raw,
         );
+    }
+
+    /**
+     * The provider is reporting an explicit failure, not delivering a result.
+     * Same order-resolution and staleness guards as the result path, but
+     * fails the request (FailureStage::Service) instead of ingesting.
+     */
+    private function recordFailureReport(Service $service, string $externalOrderId, string $raw): JsonResponse
+    {
+        $request = ServiceRequest::query()
+            ->where('external_order_id', $externalOrderId)
+            ->first();
+
+        if ($request === null || $request->order->service_id !== $service->id) {
+            return $this->record($service, null, $externalOrderId, null, WebhookOutcome::UnknownOrder, 404, $raw);
+        }
+
+        $isStale = ServiceRequest::query()
+            ->where('order_id', $request->order_id)
+            ->where('attempt_no', '>', $request->attempt_no)
+            ->exists();
+        if ($isStale) {
+            return $this->record($service, $request, $externalOrderId, null, WebhookOutcome::StaleAttempt, 409, $raw);
+        }
+
+        $this->fail->handle($request, FailureStage::Service);
+
+        return $this->record($service, $request, $externalOrderId, null, WebhookOutcome::FailureReported, 200, $raw);
     }
 
     /**
@@ -97,6 +140,9 @@ class WebhookController extends Controller
             bytes: isset($media['content_base64']) && is_string($media['content_base64'])
                 ? (base64_decode($media['content_base64'], true) ?: null)
                 : null,
+            // The preferred path for real media: the provider already uploaded
+            // it via POST /storage and hands us back only the reference.
+            mediaId: is_string($data['media_id'] ?? null) ? $data['media_id'] : null,
         );
     }
 

@@ -13,7 +13,7 @@ use Illuminate\Console\Command;
  */
 class AnalyticsReport extends Command
 {
-    protected $signature = 'analytics:report {service? : A service slug or id; omit to report on every service}';
+    protected $signature = 'analytics:report {service? : A service slug or id; omit to report on every service} {--json : Output machine-readable JSON instead of formatted tables}';
 
     protected $description = 'Print the interest ladder, version comparison, and entry-mode funnel for a service.';
 
@@ -27,6 +27,18 @@ class AnalyticsReport extends Command
             $this->error('No matching service.');
 
             return self::FAILURE;
+        }
+
+        if ($this->option('json')) {
+            $this->line(json_encode($services->map(fn ($service) => [
+                'service_id' => $service->id,
+                'slug' => $service->slug,
+                'interest_ladder' => $analytics->interestLadder($service->id),
+                'version_comparison' => $analytics->versionComparison($service->id)->all(),
+                'entry_mode_funnel' => $analytics->entryModeFunnel($service->id)->all(),
+            ])->all()));
+
+            return self::SUCCESS;
         }
 
         foreach ($services as $service) {
