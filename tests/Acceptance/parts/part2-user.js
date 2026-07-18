@@ -115,15 +115,15 @@ async function run(ctx, report) {
     await page.waitForSelector('text=Step 1 of', { timeout: 10000 });
     await page.setInputFiles('input[type="file"]', IMAGE_FIXTURE);
     await page.waitForTimeout(200);
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=Step 2 of', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Matte$/ }).click();
+    await page.locator('button', { hasText: /^\s*Matte\s*$/ }).click();
     await page.waitForSelector('text=Step 2 of 4', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=Step 3 of 4', { timeout: 5000 });
-    await page.locator('button', { hasText: new RegExp(`^${accentLabel}$`) }).click();
+    await page.locator('button', { hasText: new RegExp(`^\\s*${accentLabel}\\s*$`) }).click();
     await page.waitForTimeout(150);
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=Step 4 of 4', { timeout: 5000 });
 
     const [resp] = await Promise.all([
@@ -184,7 +184,7 @@ async function run(ctx, report) {
     console.log('  [debug] visible buttons:', JSON.stringify(await page.locator('button').allTextContents()));
 
     // Required-image gate: blocked with no toast-satisfying answer yet.
-    const nextBtn = page.locator('button', { hasText: /^Next$/ });
+    const nextBtn = page.locator('button', { hasText: /^\s*Next\s*$/ });
     try {
       await nextBtn.click({ timeout: 5000 });
     } catch (e) {
@@ -202,22 +202,22 @@ async function run(ctx, report) {
     await page.waitForSelector('text=This field is required', { timeout: 5000 });
     await page.setInputFiles('input[type="file"]', IMAGE_FIXTURE);
     await page.waitForTimeout(200);
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
 
     // Finish (3 options); Accent not yet a step at all (total=3).
     await page.waitForSelector('text=Step 2 of 3', { timeout: 5000 });
-    const finishOptionCount = await page.locator('button', { hasText: /^(Matte|Glossy|Satin)$/ }).count();
+    const finishOptionCount = await page.locator('button', { hasText: /^\s*(Matte|Glossy|Satin)\s*$/ }).count();
     assert.strictEqual(finishOptionCount, 3, `expected 3 Finish options, got ${finishOptionCount}`);
-    await page.locator('button', { hasText: /^Matte$/ }).click();
+    await page.locator('button', { hasText: /^\s*Matte\s*$/ }).click();
 
     // Gating: choosing Matte reveals Accent -- total jumps to 4 immediately.
     await page.waitForSelector('text=Step 2 of 4', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=Step 3 of 4', { timeout: 5000 });
-    const accentOptionCount = await page.locator('button', { hasText: /^(Warm|Cool)$/ }).count();
+    const accentOptionCount = await page.locator('button', { hasText: /^\s*(Warm|Cool)\s*$/ }).count();
     assert.strictEqual(accentOptionCount, 2, `expected exactly the 2 Accent options once gated open, got ${accentOptionCount}`);
-    await page.locator('button', { hasText: /^Warm$/ }).click();
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    await page.locator('button', { hasText: /^\s*Warm\s*$/ }).click();
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
 
     // HD (toggle) -- optional, exercised but never blocking.
     await page.waitForSelector('text=Step 4 of 4', { timeout: 5000 });
@@ -333,7 +333,7 @@ async function run(ctx, report) {
   });
 
   await report.step(15, 'All 4 results render, each genuinely different, each linked by media_id', async () => {
-    const outputCards = await page.locator('text=/^Output [0-9]$/').count();
+    const outputCards = await page.locator('text=/^\\s*Output [0-9]\\s*$/').count();
     assert.strictEqual(outputCards, 4, `expected 4 output cards, got ${outputCards}`);
 
     const orderRow = await ctx.admin.get(`/admin/orders/${order1.id}`);
@@ -368,7 +368,7 @@ async function run(ctx, report) {
     try {
       const [download] = await Promise.all([
         page.waitForEvent('download', { timeout: 8000 }),
-        page.locator('button', { hasText: /^Download$/ }).first().click(),
+        page.locator('button', { hasText: /^\s*Download\s*$/ }).first().click(),
       ]);
       savedPath = path.join(os.tmpdir(), `acceptance-result-${Date.now()}`);
       await download.saveAs(savedPath);
@@ -393,7 +393,7 @@ async function run(ctx, report) {
   await report.step(18, 'Regenerate creates a SIBLING order (root_order_id/regenerated_from_order_id chain); further regenerates are capped by regenerate_limit', async () => {
     const chain = [order1.id];
     for (let i = 0; i < 3; i++) {
-      await page.locator('button', { hasText: /^Run again$/ }).click();
+      await page.locator('button', { hasText: /^\s*Run again\s*$/ }).click();
       const resp = await fillWizardAndSubmit('Warm');
       assert.strictEqual(resp.status(), 202, `regenerate #${i + 1} was rejected unexpectedly: ${JSON.stringify(await resp.json())}`);
       const body = await resp.json();
@@ -413,7 +413,7 @@ async function run(ctx, report) {
     const ordersBeforeCap = await ctx.admin.get(`/admin/services/${ctx.state.serviceId}/orders`);
     const countBeforeCap = ordersBeforeCap.data.meta_stats.total;
 
-    await page.locator('button', { hasText: /^Run again$/ }).click();
+    await page.locator('button', { hasText: /^\s*Run again\s*$/ }).click();
     const cappedResp = await fillWizardAndSubmit('Warm');
     assert.strictEqual(cappedResp.status(), 422, `expected the 4th regenerate to be capped by regenerate_limit, got HTTP ${cappedResp.status()}`);
 
@@ -450,7 +450,7 @@ async function run(ctx, report) {
 
     await page.locator('button', { hasText: /Back to marketplace/ }).click();
     await page.waitForSelector(`text=${SERVICE_NAME}`, { timeout: 15000 });
-    await page.locator('button', { hasText: /^Saved/ }).click();
+    await page.locator('button', { hasText: /^\s*Saved/ }).click();
     await page.waitForTimeout(300);
     assert.strictEqual(
       await page.locator('span', { hasText: SERVICE_NAME }).count(),
@@ -462,35 +462,35 @@ async function run(ctx, report) {
       0,
       'expected a non-bookmarked service to be hidden by the Saved filter',
     );
-    await page.locator('button', { hasText: /^Saved/ }).click();
+    await page.locator('button', { hasText: /^\s*Saved/ }).click();
 
     await page.locator('span', { hasText: SERVICE_NAME }).click();
     await page.waitForSelector(`h1:has-text("${SERVICE_NAME}")`, { timeout: 15000 });
     const commentBody = `Acceptance test comment ${Date.now()}`;
     await page.locator('textarea[placeholder="Share your experience with this service…"]').fill(commentBody);
-    await page.locator('button', { hasText: /^Post comment$/ }).click();
+    await page.locator('button', { hasText: /^\s*Post comment\s*$/ }).click();
     await page.waitForSelector(`text=${commentBody}`, { timeout: 8000 });
   });
 
   await report.step(20, 'Chat mode: a second complete order via the conversational flow, entry_mode=chat, same gating', async () => {
     await page.locator('button', { hasText: /Use this service/ }).click();
     await page.waitForSelector('text=Wizard', { timeout: 10000 });
-    await page.locator('button', { hasText: /^Chat$/ }).click();
+    await page.locator('button', { hasText: /^\s*Chat\s*$/ }).click();
     await page.waitForSelector('text=Room photo', { timeout: 10000 });
 
     await page.setInputFiles('input[type="file"]', IMAGE_FIXTURE);
     await page.waitForTimeout(300);
 
     await page.waitForSelector('text=Finish', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Matte$/ }).click();
+    await page.locator('button', { hasText: /^\s*Matte\s*$/ }).click();
     await page.waitForTimeout(300);
 
     await page.waitForSelector('text=Accent', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Warm$/ }).click();
+    await page.locator('button', { hasText: /^\s*Warm\s*$/ }).click();
     await page.waitForTimeout(300);
 
     await page.waitForSelector('text=HD output', { timeout: 5000 });
-    await page.locator('button', { hasText: /^Yes$/ }).click();
+    await page.locator('button', { hasText: /^\s*Yes\s*$/ }).click();
     await page.waitForTimeout(300);
 
     const [resp] = await Promise.all([
