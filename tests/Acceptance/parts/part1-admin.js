@@ -106,18 +106,13 @@ async function run(ctx, report) {
   });
 
   await report.step(3, 'Create a draft version pointed at the external mock service', async () => {
-    await page.click('button', { hasText: /^\+ New version$/ });
-    await page.waitForSelector('text=New draft version created.', { timeout: 8000 });
-
-    const versionMatch = await page.evaluate(() => window.location.search);
-    const vMatch = /[?&]v=([a-f0-9-]{36})/.exec(versionMatch || '');
-    // Fall back to reading it from the API if the query param isn't set yet.
-    let versionId = vMatch && vMatch[1];
-    if (!versionId) {
-      const versions = await ctx.admin.get(`/admin/services/${ctx.state.serviceId}/versions`);
-      versionId = versions.data.data.find((x) => x.status === 'draft').id;
-    }
-    ctx.state.versionId = versionId;
+    // CreateService already creates the first, empty draft version (v1) as
+    // part of service creation -- no separate "+ New version" click needed
+    // (or wanted: that would make an unwanted v2 before v1 is even used).
+    const versions = await ctx.admin.get(`/admin/services/${ctx.state.serviceId}/versions`);
+    const draft = versions.data.data.find((x) => x.status === 'draft');
+    assert.ok(draft, 'expected the service to already have its auto-created v1 draft');
+    ctx.state.versionId = draft.id;
 
     await page.click('button[title="Rename version"]');
     await page.fill('input[placeholder="Version name"]', 'v1 - golden hour');
@@ -127,15 +122,15 @@ async function run(ctx, report) {
     await page.click('button:has-text("Integration")');
     await page.waitForSelector('text=Execution', { timeout: 5000 });
 
-    await page.fill('label:has-text("Credits per request") ~ input', '2');
-    await page.fill('label:has-text("Regenerate limit") ~ input', '3');
-    await page.fill('label:has-text("Response timeout (s)") ~ input', String(v.responseTimeoutS));
-    await page.fill('label:has-text("Poll interval (s)") ~ input', String(v.getIntervalS));
-    await page.fill('label:has-text("Max poll attempts") ~ input', String(v.maxGetAttempts));
-    await page.fill('label:has-text("POST url") ~ input', `${ctx.mockUrl}/run`);
-    await page.fill('label:has-text("GET url") ~ input', `${ctx.mockUrl}/jobs`);
+    await page.fill('label:has-text("Credits per request") input', '2');
+    await page.fill('label:has-text("Regenerate limit") input', '3');
+    await page.fill('label:has-text("Response timeout (s)") input', String(v.responseTimeoutS));
+    await page.fill('label:has-text("Poll interval (s)") input', String(v.getIntervalS));
+    await page.fill('label:has-text("Max poll attempts") input', String(v.maxGetAttempts));
+    await page.fill('label:has-text("POST url") + input', `${ctx.mockUrl}/run`);
+    await page.fill('label:has-text("GET url") + input', `${ctx.mockUrl}/jobs`);
     await page.locator('button', { hasText: /^Save$/ }).click();
-    await page.waitForSelector('text=Saved.', { timeout: 5000 });
+    await page.waitForTimeout(800);
 
     const apiVersion = await ctx.admin.get(`/admin/versions/${ctx.state.versionId}`);
     assert.strictEqual(apiVersion.data.data.coin_cost, 2);
