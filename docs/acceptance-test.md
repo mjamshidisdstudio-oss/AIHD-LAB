@@ -28,25 +28,30 @@ Write a standalone mock AI service (Node or a separate PHP process) that
 runs on its own port and implements contract v1 exactly as a real
 third-party dev would:
 
-- `POST /run` — accepts `{ inputs (keyed by slug), media_ids, callback_url,
-  external_order_id or returns its own }`, authenticates with the Bearer
-  service key we gave it, responds immediately with its job id. Does NOT
-  return results synchronously.
+- `POST {post_url}` (the version's configured "job submission" endpoint —
+  there is no fixed `/run` path; the admin sets `post_url` per version) —
+  authenticates with `Authorization: Bearer {webhook_signing_key}` (the
+  same shared secret used for the other two legs below), responds
+  immediately with its own job id. Does NOT return results synchronously.
 - Then, asynchronously (delay configurable per timing profile so the
   waiting state is real):
   1. Downloads the input image via `GET {our_base}/storage/{media_id}` with
-     its Bearer key.
+     its Bearer key — the `media_id` for each image/video input arrives in
+     the submission payload's `media_ids` array (see wire contract below).
   2. "Processes" it — actually transform the file (resize/tint/whatever) so
      the outputs are genuinely different bytes per `result_number`, not
      copies.
   3. Uploads each of the 4 results via `POST {our_base}/storage` → collects
      the returned media_ids.
   4. Records them in its own tiny store.
-  5. POSTs our `callback_url` with `{ external_order_id, result_number,
-     type, media_id }` per result, each individually HMAC-signed over the
-     raw body with the shared key.
-- `GET /jobs/{id}` — the poll endpoint, returning status + any results
-  ready. Must work independently of the webhook.
+  5. POSTs our webhook endpoint (`POST /api/webhooks/{service}/results`,
+     fixed and predictable from `service_id` — not a per-request
+     `callback_url`) with `{ external_order_id, result_number, type,
+     media_id }` per result, each individually HMAC-signed over the raw
+     body with the shared key.
+- `GET {get_url}` (the version's configured poll endpoint) — same Bearer
+  auth, returning status + any results ready. Must work independently of
+  the webhook.
 - Modes it can be put into for the failure tests: `normal`, `silent`
   (never calls the webhook), `bad-signature`, `failing` (reports failure),
   `slow` (exceeds `response_timeout_s`), `duplicate` (delivers the same
@@ -54,6 +59,70 @@ third-party dev would:
 
 It must never receive S3 credentials, never see a storage path, and treat
 `media_id` as an opaque token.
+
+### Wire contract (as implemented)
+
+This section reflects the actual, connected contract — the two fixes
+made while building this suite (see the two commits preceding this one:
+the outbound payload gained `slug`/`media_ids`, and outbound calls gained
+Bearer auth) plus the media_id-reference ingestion path added alongside
+them.
+
+**Outbound, us → provider** (`POST {post_url}`, `Authorization: Bearer
+{webhook_signing_key}`):
+```json
+{
+  "order_id": "...",
+  "inputs": [
+    {"input_id": "...", "slug": "room_photo", "value_text": null, "value_bool": null},
+    {"input_id": "...", "slug": "hd", "value_text": null, "value_bool": true}
+  ],
+  "media_ids": [
+    {"input_id": "...", "slug": "room_photo", "media_id": "...", "position": 0}
+  ],
+  "expected_outputs": [
+    {"result_number": 1, "type": "image"}
+  ]
+}
+```
+Response: `{"external_order_id": "...", "status": "accepted"}`.
+
+**Poll, us → provider** (`GET {get_url}?external_order_id=...`, same
+Bearer auth). Pending: `{"status": "pending"}` (anything other than
+`"completed"`). Done:
+```json
+{
+  "status": "completed",
+  "latency_ms": 1950,
+  "results": [
+    {"result_number": 1, "type": "image", "media_id": "..."},
+    {"result_number": 2, "type": "text", "text": "..."}
+  ]
+}
+```
+`content_base64`/`mime` (inline bytes) remain valid alongside `media_id`
+per result — both paths are accepted; `media_id` is the preferred path
+for real media.
+
+**Webhook, provider → us** (`POST /api/webhooks/{service}/results`,
+`X-Signature: HMAC-SHA256(raw_body, webhook_signing_key)`):
+```json
+{"external_order_id": "...", "result_number": 1, "type": "image", "media_id": "..."}
+```
+or, for the inline-bytes path: `{"..., "media": {"mime": "image/png",
+"content_base64": "..."}}`.
+
+**Result upload, provider → us** (`POST /storage`, same Bearer auth,
+multipart `order_id` + `file`) → `{"media_id": "..."}`, 201. The provider
+uploads once per result, then references it by `media_id` in the webhook
+or poll payload above — it is never asked to re-send the bytes.
+
+**Security**: a `media_id` is an opaque, not-secret token. Every ingest
+(webhook or poll) verifies the referenced file was uploaded for the SAME
+order before linking it; a mismatch is rejected outright (webhook outcome
+`invalid_media_reference`, HTTP 403) rather than silently dropped or
+linked. See `IngestResultTest`/`WebhookControllerTest` for the Never-Again
+coverage.
 
 ---
 

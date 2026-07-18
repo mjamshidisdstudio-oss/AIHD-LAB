@@ -70,7 +70,18 @@ class PollRequest
         }
 
         foreach ($result->items as $item) {
-            $this->ingest->handle($request, $item, ResultSource::Poll, $result->latencyMs);
+            $outcome = $this->ingest->handle($request, $item, ResultSource::Poll, $result->latencyMs);
+
+            // Poll deliveries have no webhook_deliveries receipt trail, so a
+            // rejection has nowhere else to surface -- log it, same as any
+            // other poll-time anomaly in this method.
+            if ($outcome->wasRejected()) {
+                Log::warning('PollRequest: result rejected.', [
+                    'request_id' => $request->id,
+                    'result_number' => $item->resultNumber,
+                    'reason' => $outcome->rejectedReason,
+                ]);
+            }
         }
     }
 }

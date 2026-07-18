@@ -53,6 +53,7 @@ class HttpExternalServiceClient implements ExternalServiceClient
                 bytes: isset($row['content_base64'])
                     ? (base64_decode($row['content_base64'], true) ?: null)
                     : null,
+                mediaId: $row['media_id'] ?? null,
             ))
             ->all();
 

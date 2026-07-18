@@ -71,13 +71,19 @@ class WebhookController extends Controller
             is_int($data['latency_ms'] ?? null) ? $data['latency_ms'] : 0,
         );
 
+        $webhookOutcome = match (true) {
+            $outcome->wasRejected() => WebhookOutcome::InvalidMediaReference,
+            $outcome->duplicate => WebhookOutcome::Duplicate,
+            default => WebhookOutcome::Ingested,
+        };
+
         return $this->record(
             $service,
             $request,
             $externalOrderId,
             $resultNumber,
-            $outcome->duplicate ? WebhookOutcome::Duplicate : WebhookOutcome::Ingested,
-            200,
+            $webhookOutcome,
+            $outcome->wasRejected() ? 403 : 200,
             $raw,
         );
     }
@@ -97,6 +103,9 @@ class WebhookController extends Controller
             bytes: isset($media['content_base64']) && is_string($media['content_base64'])
                 ? (base64_decode($media['content_base64'], true) ?: null)
                 : null,
+            // The preferred path for real media: the provider already uploaded
+            // it via POST /storage and hands us back only the reference.
+            mediaId: is_string($data['media_id'] ?? null) ? $data['media_id'] : null,
         );
     }
 
