@@ -55,6 +55,24 @@ async function postSignedWebhook(serviceId, bodyObj) {
   return postWebhookRaw(raw, hmacSign(raw), serviceId);
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * SweepPolls only picks up a request once get_interval_s has genuinely
+ * elapsed since last_polled_at -- its "due" query is a real SQL condition,
+ * not a formality. Whatever incidental waiting happened before this call
+ * (e.g. polling the mock for job completion) is enough under the fast
+ * profile's 1s interval, but not guaranteed under realistic's 10s one, so
+ * every poll:sweep invocation waits out the interval explicitly rather than
+ * relying on that coincidence.
+ */
+async function sweepAfterInterval(ctx) {
+  await sleep(ctx.config.version.getIntervalS * 1000 + 500);
+  ctx.runArtisan('poll:sweep');
+}
+
 async function waitForMockJob(ctx, orderId, status, timeoutMs = 8000) {
   const deadline = Date.now() + timeoutMs;
   let job = null;
@@ -77,10 +95,6 @@ async function waitForOrderStatus(ctx, orderId, status, timeoutMs = 8000) {
     await new Promise((r) => setTimeout(r, 150));
   }
   return order;
-}
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function waitForWebhookReceipt(ctx, serviceId, outcome, timeoutMs = 8000) {
@@ -137,7 +151,7 @@ async function run(ctx, report) {
     const balanceAfterDeduct = await ctx.core.balance('dev-user');
     assert.strictEqual(balanceBefore - balanceAfterDeduct, 2, 'expected exactly 2 coins deducted at submit time');
 
-    ctx.runArtisan('poll:sweep');
+    await sweepAfterInterval(ctx);
 
     orderRow = await waitForOrderStatus(ctx, orderId, 'completed', 5000);
     assert.strictEqual(orderRow.status, 'completed', 'expected the poll sweep to complete the silent-mode order');
@@ -170,7 +184,7 @@ async function run(ctx, report) {
     const jobA = await waitForMockJob(ctx, orderIdA, 'completed');
     assert.ok(jobA, 'mock A never finished processing');
 
-    ctx.runArtisan('poll:sweep');
+    await sweepAfterInterval(ctx);
     const orderRowA = await waitForOrderStatus(ctx, orderIdA, 'completed', 5000);
     assert.strictEqual(orderRowA.status, 'completed', 'expected ordering A to complete via poll first');
     const requestIdA = orderRowA.requests[0].id;
@@ -217,7 +231,7 @@ async function run(ctx, report) {
 
     const balanceAfterWebhookB = await ctx.core.balance('dev-user');
 
-    ctx.runArtisan('poll:sweep');
+    await sweepAfterInterval(ctx);
     const orderRowB = await waitForOrderStatus(ctx, orderIdB, 'completed', 5000);
     assert.strictEqual(orderRowB.status, 'completed', 'expected the poll sweep to finish delivering the remaining 3 results');
     const requestIdB = orderRowB.requests[0].id;
@@ -248,7 +262,7 @@ async function run(ctx, report) {
     // Hygiene: the underlying job is done processing regardless of mode --
     // sweep it to a clean terminal state so it doesn't linger against this
     // service's max_concurrent for later steps.
-    ctx.runArtisan('poll:sweep');
+    await sweepAfterInterval(ctx);
     await waitForOrderStatus(ctx, orderId, 'completed', 5000);
   });
 
@@ -317,23 +331,20 @@ async function run(ctx, report) {
     assert.strictEqual(resp.status, 202, `submit failed: ${JSON.stringify(resp.data)}`);
     const orderId = resp.data.data.id;
 
-    // max_get_attempts is 2 in the fast profile; the first attempt already
-    // ran synchronously during submit. Drive the remaining attempts
-    // explicitly -- nothing in this harness runs the real poll:sweep cron.
-    // SweepPolls only picks up a request once get_interval_s has elapsed
-    // since last_polled_at (its "due" query is a real SQL condition, not a
-    // formality) -- firing poll:sweep back to back with no wait would find
-    // nothing due and silently sweep 0 requests both times.
-    const intervalMs = ctx.config.version.getIntervalS * 1000 + 500;
-    await sleep(intervalMs);
-    ctx.runArtisan('poll:sweep'); // 2nd attempt: also times out
-    await sleep(intervalMs);
-    ctx.runArtisan('poll:sweep'); // budget spent -> FailureStage::Timeout, no network call needed
+    // The first attempt already ran synchronously during submit -- drive the
+    // rest of the budget explicitly, since nothing in this harness runs the
+    // real poll:sweep cron. Exactly maxGetAttempts manual sweeps are needed
+    // regardless of profile: all but the last make a real (timing-out)
+    // network attempt; the last one finds the budget already spent and
+    // fails immediately with no network call.
+    for (let i = 0; i < ctx.config.version.maxGetAttempts; i++) {
+      await sweepAfterInterval(ctx);
+    }
 
     const orderRow = await waitForOrderStatus(ctx, orderId, 'failed', 8000);
     assert.strictEqual(orderRow.status, 'failed', `expected the order to fail, got ${orderRow.status}`);
     assert.strictEqual(orderRow.requests[0].failure_stage, 'timeout');
-    assert.ok(orderRow.requests[0].get_poll_count >= 2, 'expected the attempt budget to have been spent');
+    assert.ok(orderRow.requests[0].get_poll_count >= ctx.config.version.maxGetAttempts, 'expected the attempt budget to have been spent');
 
     const balanceAfter = await ctx.core.balance('dev-user');
     assert.strictEqual(balanceAfter, balanceBefore, 'expected the deducted coins to be refunded exactly once');
