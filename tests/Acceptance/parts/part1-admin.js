@@ -162,7 +162,14 @@ async function run(ctx, report) {
     for (const text of waitingTexts) {
       await page.fill('input[placeholder="e.g. Dreaming up seasonal styles…"]', text);
       await page.locator('button', { hasText: /^Add$/ }).click();
-      await page.waitForTimeout(150);
+      // addWaitingText() computes sort_order from the current in-memory
+      // waiting_texts length, then reloads the version before clearing the
+      // input -- clicking Add again before that round trip finishes races
+      // two adds onto the same sort_order and silently drops one (the
+      // failure surfaces only as a toast, which nothing here observes).
+      // Wait for this exact text to actually render (i.e. the reload
+      // landed) before moving on, rather than a blind timeout.
+      await page.waitForSelector(`text="${text}"`, { timeout: 8000 });
     }
 
     const apiVersion = await ctx.admin.get(`/admin/versions/${ctx.state.versionId}`);
