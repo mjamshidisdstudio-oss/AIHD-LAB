@@ -12,7 +12,11 @@ const SERVICE_NAME = 'Acceptance Twilight Views';
 // word as a badge we're asserting on would double-count against it.
 const FREE_NAME = 'Acceptance Bonus Filter';
 const EXTERNAL_NAME = 'Acceptance Partner Tool';
-const EXTERNAL_URL = 'https://partner.example.com/tool';
+// A real, always-resolvable domain (IANA's reserved documentation domain) --
+// a fake host would have its popup navigation fail through this sandbox's
+// outbound proxy, replacing the URL with an internal chrome-error:// page
+// before the assertion below ever gets to look at it.
+const EXTERNAL_URL = 'https://example.com/partner-tool';
 const IMAGE_FIXTURE = path.join(__dirname, '..', 'fixtures', 'room-photo.png');
 
 // marketplace/stores/order.ts's own constants -- kept in lockstep here so
@@ -300,22 +304,28 @@ async function run(ctx, report) {
   });
 
   await report.step(14, 'Completion arrives via Echo (socket), not by polling', async () => {
+    // Anchor on the websocket frame's OWN timestamp, not order1.completedAt --
+    // the latter comes from step 13's polling loop (checking page text every
+    // 150ms), which can lag the true push arrival by up to a few hundred ms
+    // and would otherwise make this timing proof flaky against its own
+    // measurement error, not against anything the app actually does.
     const relevantFrames = wsFrames.filter(
       (f) => f.t >= order1.submittedAt && f.t <= order1.completedAt + 300 && f.payload.includes('order.completed'),
     );
     assert.ok(relevantFrames.length > 0, 'never observed an order.completed websocket frame for this order');
+    const pushArrivedAt = relevantFrames[0].t;
 
-    const elapsed = order1.completedAt - order1.submittedAt;
+    const elapsed = pushArrivedAt - order1.submittedAt;
     assert.ok(
       elapsed < POLL_FALLBACK_MS,
       `completion took ${elapsed}ms -- not clearly faster than the ${POLL_FALLBACK_MS}ms poll fallback, so push cannot be distinguished from poll`,
     );
 
-    const prematurePolls = orderGetRequests.filter((t) => t > order1.submittedAt && t < order1.completedAt);
+    const prematurePolls = orderGetRequests.filter((t) => t > order1.submittedAt && t < pushArrivedAt);
     assert.strictEqual(
       prematurePolls.length,
       0,
-      'a GET /orders/{id} poll-fallback request fired before completion -- push cannot be distinguished from poll',
+      'a GET /orders/{id} poll-fallback request fired before the push arrived -- push cannot be distinguished from poll',
     );
   });
 
@@ -418,14 +428,19 @@ async function run(ctx, report) {
   await report.step(19, 'Vote up then flip to down (one row, flipped, not two); bookmark + Saved filter; post a comment', async () => {
     await page.waitForSelector(`h1:has-text("${SERVICE_NAME}")`, { timeout: 15000 });
 
-    await page.locator('button[title="Upvote"]').click();
+    // The detail page's own vote buttons (in the aside quick-actions card)
+    // carry no title attribute at all -- that only exists on the grid/board
+    // card's vote buttons (a different component). Up is the first, down the
+    // second, of the two flex-1/rounded-xl buttons in that card.
+    const voteButtons = page.locator('aside button.flex-1.rounded-xl');
+    await voteButtons.nth(0).click();
     await page.waitForTimeout(400);
     let rowCount = ctx.db.queryScalar(`SELECT COUNT(*) FROM service_votes WHERE service_id='${ctx.state.serviceId}' AND user_ref='dev-user'`);
     assert.strictEqual(rowCount, '1', `expected exactly one service_votes row after upvoting, got ${rowCount}`);
     let value = ctx.db.queryScalar(`SELECT value FROM service_votes WHERE service_id='${ctx.state.serviceId}' AND user_ref='dev-user'`);
     assert.strictEqual(value, '1');
 
-    await page.locator('button[title="Downvote"]').click();
+    await voteButtons.nth(1).click();
     await page.waitForTimeout(400);
     rowCount = ctx.db.queryScalar(`SELECT COUNT(*) FROM service_votes WHERE service_id='${ctx.state.serviceId}' AND user_ref='dev-user'`);
     assert.strictEqual(rowCount, '1', 'flipping the vote must update the SAME row, not add a second one');
@@ -509,14 +524,17 @@ async function run(ctx, report) {
 
     const before = Number(ctx.db.queryScalar(`SELECT COUNT(*) FROM interactions WHERE kind='external_click' AND service_id='${externalServiceId}'`) ?? 0);
 
+    // Check the popup's URL IMMEDIATELY, before it has a chance to actually
+    // resolve (or fail to, through this sandbox's outbound proxy) -- once a
+    // navigation definitively fails, Chromium replaces the address with its
+    // own chrome-error:// page, which would otherwise race this assertion.
     const context = page.context();
     const [popup] = await Promise.all([
       context.waitForEvent('page', { timeout: 8000 }),
       page.locator('span', { hasText: EXTERNAL_NAME }).click(),
     ]);
-    await popup.waitForTimeout(100);
     assert.ok(
-      popup.url() === 'about:blank' || popup.url().includes('partner.example.com'),
+      popup.url() === 'about:blank' || popup.url().startsWith(EXTERNAL_URL),
       `expected the click to open the external URL in a new tab, got: ${popup.url()}`,
     );
     await popup.close();

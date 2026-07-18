@@ -52,7 +52,16 @@ async function main() {
     // since a fresh CI MySQL container has no such restriction).
     ...(process.env.ACCEPTANCE_DB_USERNAME ? { DB_USERNAME: process.env.ACCEPTANCE_DB_USERNAME } : {}),
     ...(process.env.ACCEPTANCE_DB_PASSWORD !== undefined ? { DB_PASSWORD: process.env.ACCEPTANCE_DB_PASSWORD } : {}),
-    CACHE_STORE: 'array',
+    // NOT 'array': LocalCoreStubState (balances, held txns, tokens) is
+    // Cache-backed by design, and this suite makes genuinely separate HTTP
+    // requests against a real running server -- 'array' cache lives only for
+    // the lifetime of a single PHP request, so a deduct made by one request
+    // is invisible to a balance check made by the next (this only ever
+    // looked fine in PHPUnit feature tests, which share one process for the
+    // whole test method). 'file' persists across real requests/workers with
+    // no new dependency; cache:clear below gives it the same clean-state
+    // guarantee migrate:fresh gives the database.
+    CACHE_STORE: 'file',
     SESSION_DRIVER: 'array',
     QUEUE_CONNECTION: 'sync',
     // Real (local) broadcasting -- this environment (and typical CI runners)
@@ -85,6 +94,9 @@ async function main() {
 
     log('setup', 'migrate:fresh --seed (clean-state guarantee)');
     execSync('php artisan migrate:fresh --seed', { stdio: 'inherit', cwd: ROOT, env: laravelEnv });
+
+    log('setup', 'cache:clear (clean-state guarantee for the file-backed CoreStub)');
+    execSync('php artisan cache:clear', { stdio: 'inherit', cwd: ROOT, env: laravelEnv });
 
     // --- Boot every process the suite needs, in parallel -------------------
     group.spawnProcess('laravel', 'php', ['artisan', 'serve', '--port=80', '--no-reload'], { cwd: ROOT, env: laravelEnv });
