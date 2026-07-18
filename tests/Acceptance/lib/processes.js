@@ -91,6 +91,40 @@ class ProcessGroup {
     });
   }
 
+  /**
+   * Kill one named process and respawn it fresh with new args/env, leaving
+   * every other process untouched. Used for the "core unreachable" failure
+   * path (step 31), which needs the Laravel process restarted with a
+   * deliberately-dead CORE_BASE_URL and then restarted again afterward with
+   * the real one -- core connectivity is a whole-process config value, not
+   * something any single request can be made to see differently.
+   */
+  async restartProcess(name, command, args, opts = {}) {
+    const index = this.entries.findIndex((e) => e.name === name);
+    if (index === -1) throw new Error(`restartProcess: no running process named "${name}"`);
+    const { proc: oldProc } = this.entries[index];
+
+    const exited = new Promise((resolve) => oldProc.once('exit', resolve));
+    try {
+      process.kill(-oldProc.pid, 'SIGTERM');
+    } catch (e) {
+      log(name, 'SIGTERM failed:', e.message);
+    }
+    await Promise.race([exited, new Promise((r) => setTimeout(r, 1500))]);
+    if (oldProc.exitCode === null && oldProc.signalCode === null) {
+      try {
+        process.kill(-oldProc.pid, 'SIGKILL');
+      } catch (e) {
+        log(name, 'SIGKILL failed:', e.message);
+      }
+      await exited;
+    }
+    this.entries.splice(index, 1);
+
+    log(name, 'restarting...');
+    return this.spawnProcess(name, command, args, opts);
+  }
+
   async teardown() {
     log('teardown', `stopping ${this.entries.length} process(es)`);
     for (const { name, proc } of [...this.entries].reverse()) {

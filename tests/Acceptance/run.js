@@ -140,7 +140,7 @@ async function main() {
     log('setup', 'all processes healthy -- starting scenario');
 
     const scenario = require('./scenario');
-    await scenario.run({ config, report });
+    await scenario.run({ config, report, group, laravelEnv, root: ROOT });
 
     exitCode = report.failed.length > 0 ? 1 : 0;
   } catch (err) {

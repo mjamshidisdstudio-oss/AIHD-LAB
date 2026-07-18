@@ -87,6 +87,18 @@ class CoreStubApi {
     if (!res.ok) throw new Error(`core-stub balance check failed: HTTP ${res.status} ${JSON.stringify(res.data)}`);
     return res.data.balance;
   }
+
+  /** Test-arrangement only: drain a user's balance via the real dev-core
+   * deduct endpoint (the same one SubmitOrder itself calls), so a later
+   * submit can be shown to hit a genuine 402. */
+  async deduct(userRef, amount, idempotencyKey) {
+    const res = await call(this.baseUrl, 'POST', '/dev/core/coins/deduct', {
+      body: { user_ref: userRef, amount, idempotency_key: idempotencyKey },
+      token: this.token,
+    });
+    if (!res.ok) throw new Error(`core-stub deduct (arrange) failed: HTTP ${res.status} ${JSON.stringify(res.data)}`);
+    return res.data.txn_ref;
+  }
 }
 
 /** The mock external service's runtime control surface (not contract v1). */
