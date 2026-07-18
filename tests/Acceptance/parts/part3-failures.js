@@ -108,6 +108,13 @@ async function waitForWebhookReceipt(ctx, serviceId, outcome, timeoutMs = 8000) 
 async function run(ctx, report) {
   const serviceId = ctx.state.serviceId;
 
+  // The submit-order limiter (10/min per user_ref) is real -- Part 2 alone
+  // already spent 6 of dev-user's 10 slots, and Part 3 needs about 10 more
+  // spread across steps 22-31. Reset the bucket here and again before step
+  // 27 so neither half of Part 3 runs into a limiter that has nothing to do
+  // with any of these failure modes.
+  ctx.runArtisan('acceptance:reset-rate-limit submit-order dev-user');
+
   await report.step(22, 'SILENT: the poll sweep picks it up through the same ingest door, settles exactly once', async () => {
     await ctx.mock.setMode('silent');
     const balanceBefore = await ctx.core.balance('dev-user');
@@ -266,6 +273,10 @@ async function run(ctx, report) {
     assert.strictEqual(receipts.length, 1, 'expected exactly one unknown_order receipt for this external_order_id');
     assert.strictEqual(receipts[0].external_order_id, fakeExternalOrderId);
   });
+
+  // Second half of Part 3's submits (steps 27-31): reset again so this
+  // cluster starts with a full 10-slot budget of its own.
+  ctx.runArtisan('acceptance:reset-rate-limit submit-order dev-user');
 
   await report.step(27, 'FAILING: failure_stage set, order fails, coins refund exactly once, consecutive_failures increments', async () => {
     await ctx.mock.setMode('failing');
