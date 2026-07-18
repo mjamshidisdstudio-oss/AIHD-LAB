@@ -524,19 +524,31 @@ async function run(ctx, report) {
 
     const before = Number(ctx.db.queryScalar(`SELECT COUNT(*) FROM interactions WHERE kind='external_click' AND service_id='${externalServiceId}'`) ?? 0);
 
-    // Check the popup's URL IMMEDIATELY, before it has a chance to actually
-    // resolve (or fail to, through this sandbox's outbound proxy) -- once a
-    // navigation definitively fails, Chromium replaces the address with its
-    // own chrome-error:// page, which would otherwise race this assertion.
+    // This sandbox's outbound proxy fails a real navigation to any external
+    // host fast enough that even an immediate read of popup.url() sometimes
+    // already sees Chromium's own chrome-error:// replacement page rather
+    // than the real target -- a proxy artifact, not anything the app did
+    // wrong. So don't rely on the popup's post-navigation URL at all: record
+    // what window.open() was actually CALLED with (the frontend's real
+    // intent) via a monkeypatch that still calls through to the real
+    // implementation, so the new tab and the external_click POST both still
+    // genuinely happen.
+    await page.evaluate(() => {
+      window.__acceptanceOpenedUrls = [];
+      const originalOpen = window.open.bind(window);
+      window.open = (url, ...rest) => {
+        window.__acceptanceOpenedUrls.push(url);
+        return originalOpen(url, ...rest);
+      };
+    });
+
     const context = page.context();
     const [popup] = await Promise.all([
       context.waitForEvent('page', { timeout: 8000 }),
       page.locator('span', { hasText: EXTERNAL_NAME }).click(),
     ]);
-    assert.ok(
-      popup.url() === 'about:blank' || popup.url().startsWith(EXTERNAL_URL),
-      `expected the click to open the external URL in a new tab, got: ${popup.url()}`,
-    );
+    const openedUrls = await page.evaluate(() => window.__acceptanceOpenedUrls);
+    assert.deepStrictEqual(openedUrls, [EXTERNAL_URL], `expected window.open to be called with exactly the external_url, got: ${JSON.stringify(openedUrls)}`);
     await popup.close();
 
     let after = before;
