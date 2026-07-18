@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { execSync } = require('child_process');
 const { chromium } = require('playwright');
 const { AdminApi, MarketplaceApi, CoreStubApi, MockControl } = require('./lib/api');
@@ -11,9 +12,15 @@ const MARKETPLACE_URL = 'http://127.0.0.1:3100';
 const API_BASE = 'http://127.0.0.1/api';
 // routes/core-stub.php is mounted at /dev/core directly -- NOT under /api.
 const CORE_STUB_BASE = 'http://127.0.0.1';
+// This exact symlink is specific to the pre-provisioned dev sandbox this
+// suite was originally built in; CI and any other machine rely on
+// Playwright's own resolution instead (its default cache, or
+// PLAYWRIGHT_BROWSERS_PATH if set) after `npx playwright install chromium`.
+const SANDBOX_CHROMIUM_PATH = '/opt/pw-browsers/chromium';
 
 async function run({ config, report, group, laravelEnv, root }) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+  const launchOptions = fs.existsSync(SANDBOX_CHROMIUM_PATH) ? { executablePath: SANDBOX_CHROMIUM_PATH } : {};
+  const browser = await chromium.launch(launchOptions);
 
   const ctx = {
     config,

@@ -1,0 +1,103 @@
+name: Acceptance
+
+# Deliberately NOT on push/pull_request: this suite drives a real browser
+# against real running processes with real waits (a few minutes on the fast
+# profile, longer on realistic) -- putting it in the per-push matrix would
+# turn a ~1 minute CI run into 10+ and people would start ignoring CI. The
+# existing Tests workflow (push/PR/nightly, fast PHPUnit only) is untouched.
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Timing profile'
+        required: false
+        default: fast
+        type: choice
+        options:
+          - fast
+          - realistic
+  schedule:
+    # Nightly against main, offset from the Tests workflow's own midnight
+    # cron so the two don't contend for the same runner minute.
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    # The fast profile alone takes a few minutes; the realistic profile
+    # (production-like timeouts/intervals) takes meaningfully longer -- give
+    # both real headroom rather than racing GitHub's default job timeout.
+    timeout-minutes: 45
+
+    # Same real MySQL 8 dependency as the Tests workflow (generated columns,
+    # CHECK constraints, composite foreign keys, ENUM columns) -- and the
+    # acceptance suite's own migrate:fresh --seed needs a real server to
+    # reset against for every run, not a throwaway SQLite file.
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, bcmath, pdo, mysql, pdo_mysql
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Install Node dependencies (admin)
+        run: npm ci
+        working-directory: admin
+
+      - name: Install Node dependencies (marketplace)
+        run: npm ci
+        working-directory: marketplace
+
+      - name: Install Node dependencies (acceptance suite)
+        run: npm ci
+        working-directory: tests/Acceptance
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: tests/Acceptance
+
+      - name: Run acceptance suite
+        env:
+          # A fresh CI database has no wildcard-restricted user, unlike the
+          # dev sandbox this suite was built in -- root can create the
+          # acceptance database and is also what Laravel itself connects as.
+          ACCEPTANCE_DB_ROOT_USER: root
+          ACCEPTANCE_DB_ROOT_PASSWORD: root
+          ACCEPTANCE_DB_USERNAME: root
+          ACCEPTANCE_DB_PASSWORD: root
+          ACCEPTANCE_PROFILE: ${{ github.event.inputs.profile || 'fast' }}
+        run: composer acceptance
