@@ -272,6 +272,7 @@ async function run(ctx, report) {
 
     const seenTexts = [];
     let completed = false;
+    let firstSeenAt = null;
     const deadline = Date.now() + 30000;
     while (Date.now() < deadline && !completed) {
       let current = null;
@@ -281,7 +282,10 @@ async function run(ctx, report) {
           break;
         }
       }
-      if (current && seenTexts[seenTexts.length - 1] !== current) seenTexts.push(current);
+      if (current) {
+        firstSeenAt = firstSeenAt ?? Date.now();
+        if (seenTexts[seenTexts.length - 1] !== current) seenTexts.push(current);
+      }
       completed = (await page.locator('text=Your result is ready!').count()) > 0;
       if (!completed) await page.waitForTimeout(150);
     }
@@ -292,9 +296,14 @@ async function run(ctx, report) {
       assert.ok(waitingTexts.includes(t), `waiting panel showed a text not in the version's declared waiting_texts: "${t}"`);
     }
 
-    const elapsed = order1.completedAt - order1.submittedAt;
-    if (elapsed >= WAITING_ROTATE_MS) {
-      assert.ok(seenTexts.length >= 2, `expected the waiting text to rotate given ${elapsed}ms elapsed, but only ever saw: ${JSON.stringify(seenTexts)}`);
+    // The rotation timer starts around when the loading panel itself first
+    // appears (the same frontend call that shows it also starts the
+    // rotation interval), not at submit time -- anchoring on submittedAt
+    // would count network/submission overhead that the rotation clock never
+    // saw, understating how little time it actually had to tick.
+    const visibleMs = order1.completedAt - firstSeenAt;
+    if (visibleMs >= WAITING_ROTATE_MS) {
+      assert.ok(seenTexts.length >= 2, `expected the waiting text to rotate given ${visibleMs}ms the panel was visible, but only ever saw: ${JSON.stringify(seenTexts)}`);
     }
     order1.waitingTextsSeen = seenTexts;
 
