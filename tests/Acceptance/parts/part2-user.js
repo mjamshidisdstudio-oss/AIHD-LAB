@@ -180,25 +180,9 @@ async function run(ctx, report) {
   await report.step(11, 'Wizard mode: complete the form with a REAL uploaded image; the dependent select is hidden until its parent is chosen, then shows exactly the right options', async () => {
     await page.locator('button', { hasText: /Use this service/ }).click();
     await page.waitForSelector('text=Step 1 of', { timeout: 15000 });
-    console.log('  [debug] step header:', (await page.locator('text=Step 1 of').first().textContent()).trim());
-    console.log('  [debug] visible buttons:', JSON.stringify(await page.locator('button').allTextContents()));
 
     // Required-image gate: blocked with no toast-satisfying answer yet.
-    const nextBtn = page.locator('button', { hasText: /^\s*Next\s*$/ });
-    try {
-      await nextBtn.click({ timeout: 5000 });
-    } catch (e) {
-      const box = await nextBtn.boundingBox();
-      const hit = box
-        ? await page.evaluate(({ x, y }) => {
-            const el = document.elementFromPoint(x, y);
-            return el ? el.outerHTML.slice(0, 300) : null;
-          }, { x: box.x + box.width / 2, y: box.y + box.height / 2 })
-        : null;
-      console.log('  [debug] Next button boundingBox:', JSON.stringify(box));
-      console.log('  [debug] elementFromPoint at its center:', hit);
-      throw e;
-    }
+    await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=This field is required', { timeout: 5000 });
     await page.setInputFiles('input[type="file"]', IMAGE_FIXTURE);
     await page.waitForTimeout(200);
@@ -215,6 +199,9 @@ async function run(ctx, report) {
     await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
     await page.waitForSelector('text=Step 3 of 4', { timeout: 5000 });
     const accentOptionCount = await page.locator('button', { hasText: /^\s*(Warm|Cool)\s*$/ }).count();
+    if (accentOptionCount !== 2) {
+      console.log('  [debug] Accent step visible buttons:', JSON.stringify(await page.locator('button').allTextContents()));
+    }
     assert.strictEqual(accentOptionCount, 2, `expected exactly the 2 Accent options once gated open, got ${accentOptionCount}`);
     await page.locator('button', { hasText: /^\s*Warm\s*$/ }).click();
     await page.locator('button', { hasText: /^\s*Next\s*$/ }).click();
