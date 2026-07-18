@@ -6,7 +6,11 @@ const os = require('os');
 const path = require('path');
 
 const SERVICE_NAME = 'Acceptance Twilight Views';
-const FREE_NAME = 'Acceptance Free Filter';
+// Deliberately contains neither "free" nor "before"/"after" as a substring --
+// Playwright's unquoted text= matching (and the hasText option) is a
+// case-insensitive SUBSTRING test, so a name/tagline containing the same
+// word as a badge we're asserting on would double-count against it.
+const FREE_NAME = 'Acceptance Bonus Filter';
 const EXTERNAL_NAME = 'Acceptance Partner Tool';
 const EXTERNAL_URL = 'https://partner.example.com/tool';
 const IMAGE_FIXTURE = path.join(__dirname, '..', 'fixtures', 'room-photo.png');
@@ -70,6 +74,12 @@ async function run(ctx, report) {
       orderGetRequests.push(Date.now());
     }
   });
+  page.on('console', (msg) => {
+    if (msg.type() === 'error') console.log('  [marketplace console error]', msg.text());
+  });
+  page.on('pageerror', (err) => {
+    console.log('  [marketplace page error]', err.message);
+  });
 
   const order1 = {};
   const order2 = {};
@@ -77,12 +87,12 @@ async function run(ctx, report) {
 
   // --- Fixtures (not a numbered spec step -- see header) --------------------
   const freeSvc = await ctx.admin.post('/admin/services', {
-    slug: 'acceptance-free-filter',
+    slug: 'acceptance-bonus-filter',
     name: FREE_NAME,
     kind: 'internal',
     category: 'interior',
-    tagline: 'A totally free filter, on the house',
-    image_url: 'https://picsum.photos/seed/acceptance-free/800/600',
+    tagline: 'This one never charges credits',
+    image_url: 'https://picsum.photos/seed/acceptance-bonus/800/600',
   });
   assert.strictEqual(freeSvc.status, 201, `create free fixture service failed: ${JSON.stringify(freeSvc.data)}`);
   const freeVersions = await ctx.admin.get(`/admin/services/${freeSvc.data.data.id}/versions`);
@@ -146,7 +156,9 @@ async function run(ctx, report) {
 
     await page.waitForSelector(`text=${FREE_NAME}`, { timeout: 10000 });
     const freeCard = page.locator('span', { hasText: FREE_NAME }).locator('xpath=ancestor::div[contains(@class,"cursor-pointer")][1]');
-    assert.strictEqual(await freeCard.locator('text=Free').count(), 1, 'expected the Free badge on a coin_cost=0 service');
+    // Exact (quoted) match -- an unquoted text=Free would also match the
+    // service's own name/tagline if either happened to contain "free".
+    assert.strictEqual(await freeCard.locator('text="Free"').count(), 1, 'expected the Free badge on a coin_cost=0 service');
   });
 
   await report.step(10, 'Service detail: gallery and before/after render for the published version', async () => {
@@ -157,13 +169,19 @@ async function run(ctx, report) {
     assert.strictEqual(galleryCount, 2, `expected 2 gallery images, got ${galleryCount}`);
 
     await page.waitForSelector('#d-beforeafter', { timeout: 5000 });
-    assert.strictEqual(await page.locator('#d-beforeafter >> text=Before').count(), 1);
-    assert.strictEqual(await page.locator('#d-beforeafter >> text=After').count(), 1);
+    // Exact (quoted) match -- the section's own "Before & after" <h2> also
+    // contains "Before" as a substring, which an unquoted text= would count.
+    const beforeCount = await page.locator('#d-beforeafter >> text="Before"').count();
+    const afterCount = await page.locator('#d-beforeafter >> text="After"').count();
+    assert.strictEqual(beforeCount, 1, `expected exactly one "Before" badge, got ${beforeCount}`);
+    assert.strictEqual(afterCount, 1, `expected exactly one "After" badge, got ${afterCount}`);
   });
 
   await report.step(11, 'Wizard mode: complete the form with a REAL uploaded image; the dependent select is hidden until its parent is chosen, then shows exactly the right options', async () => {
     await page.locator('button', { hasText: /Use this service/ }).click();
     await page.waitForSelector('text=Step 1 of', { timeout: 15000 });
+    console.log('  [debug] step header:', (await page.locator('text=Step 1 of').first().textContent()).trim());
+    console.log('  [debug] visible buttons:', JSON.stringify(await page.locator('button').allTextContents()));
 
     // Required-image gate: blocked with no toast-satisfying answer yet.
     await page.locator('button', { hasText: /^Next$/ }).click();
