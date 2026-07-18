@@ -33,7 +33,7 @@ async function run(ctx, report) {
   const v = ctx.config.version;
 
   await report.step(1, 'Admin login (real Sanctum session); non-admin rejected', async () => {
-    await page.goto(`${ctx.adminUrl}/login`, { waitUntil: 'networkidle' });
+    await page.goto(`${ctx.adminUrl}/login`, { waitUntil: 'load' });
     await page.fill('input[type="email"]', NON_ADMIN_EMAIL);
     await page.fill('input[type="password"]', NON_ADMIN_PASSWORD);
     await page.click('button:has-text("Sign in")');
@@ -272,9 +272,12 @@ async function run(ctx, report) {
     const seasonGen = seeded.data.data.find((s) => s.slug === 'season-gen');
     assert.ok(seasonGen, 'expected the seeded season-gen service to exist');
 
-    await page.goto(`${ctx.adminUrl}/services/${seasonGen.id}?tab=inputs`, { waitUntil: 'networkidle' });
-    await page.waitForSelector('text=Set up this service', { timeout: 10000 });
-    await page.waitForSelector("text=frozen — inputs can't be edited", { timeout: 8000 });
+    // season-gen is already fully set up and published -- unlike our own
+    // in-progress service, its "Set up this service" checklist card doesn't
+    // render at all once complete, so wait on the frozen-inputs banner
+    // itself rather than that card.
+    await page.goto(`${ctx.adminUrl}/services/${seasonGen.id}?tab=inputs`, { waitUntil: 'load' });
+    await page.waitForSelector("text=frozen — inputs can't be edited", { timeout: 10000 });
     const duplicateButton = await page.locator('button:has-text("Duplicate to draft")').count();
     assert.ok(duplicateButton > 0, 'expected a "Duplicate to draft" affordance on a published version\'s Inputs tab');
 
@@ -282,7 +285,7 @@ async function run(ctx, report) {
     assert.ok(formLocked > 0, 'expected the frozen input form area to be visually/interaction-locked');
 
     // Back to our own service for the remaining steps.
-    await page.goto(`${ctx.adminUrl}/services/${ctx.state.serviceId}?tab=inputs`, { waitUntil: 'networkidle' });
+    await page.goto(`${ctx.adminUrl}/services/${ctx.state.serviceId}?tab=inputs`, { waitUntil: 'load' });
     await page.waitForSelector('text=Set up this service', { timeout: 10000 });
   });
 

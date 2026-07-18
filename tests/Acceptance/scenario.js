@@ -6,6 +6,8 @@ const { AdminApi, MarketplaceApi, CoreStubApi, MockControl } = require('./lib/ap
 const ADMIN_URL = 'http://127.0.0.1:3200';
 const MARKETPLACE_URL = 'http://127.0.0.1:3100';
 const API_BASE = 'http://127.0.0.1/api';
+// routes/core-stub.php is mounted at /dev/core directly -- NOT under /api.
+const CORE_STUB_BASE = 'http://127.0.0.1';
 
 async function run({ config, report }) {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
@@ -16,7 +18,7 @@ async function run({ config, report }) {
     adminUrl: ADMIN_URL,
     marketplaceUrl: MARKETPLACE_URL,
     admin: new AdminApi(API_BASE),
-    core: new CoreStubApi(API_BASE, 'dev-service-credential'),
+    core: new CoreStubApi(CORE_STUB_BASE, 'dev-service-credential'),
     mock: new MockControl(`http://127.0.0.1:${config.mockService.port}`),
     mockUrl: `http://127.0.0.1:${config.mockService.port}`,
     // Populated as the scenario progresses; later parts read what earlier
