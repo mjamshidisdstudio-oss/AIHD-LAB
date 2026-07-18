@@ -1,0 +1,14 @@
+{
+  "name": "aihd-mock-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone reference implementation of AIHD-LAB's external-provider contract v1, for acceptance testing.",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
