@@ -78,7 +78,7 @@ function sleep(ms) {
 
 // --- Calling back into our system -----------------------------------------
 
-async function downloadMedia(mediaId) {
+async function downloadMedia(mediaId, job) {
   const res = await fetch(`${OUR_BASE_URL}/api/storage/${mediaId}`, {
     headers: { Authorization: `Bearer ${SHARED_KEY}` },
   });
@@ -87,6 +87,7 @@ async function downloadMedia(mediaId) {
   }
   const buf = Buffer.from(await res.arrayBuffer());
   const mime = res.headers.get('content-type') || 'application/octet-stream';
+  if (job) job.downloadedMediaIds.push(mediaId);
   return { buf, mime };
 }
 
@@ -153,7 +154,7 @@ async function processJob(externalOrderId) {
     let inputImage = null;
     const firstMedia = job.mediaIds[0];
     if (firstMedia) {
-      inputImage = await downloadMedia(firstMedia.media_id);
+      inputImage = await downloadMedia(firstMedia.media_id, job);
     }
 
     const results = [];
@@ -225,6 +226,11 @@ async function handleRun(req, res) {
     results: [],
     reason: null,
     createdAt: Date.now(),
+    // Debug trail only (GET /admin/jobs) -- not part of contract v1. Lets the
+    // acceptance suite prove, from the outside, that this process really did
+    // fetch the input it was told about rather than just trusting its own
+    // internal call succeeded silently.
+    downloadedMediaIds: [],
   });
 
   log(`POST /run: order ${payload.order_id} -> external_order_id ${externalOrderId} (mode=${currentMode})`);
@@ -295,6 +301,26 @@ function handleAdminReset(req, res) {
   sendJson(res, 200, { ok: true });
 }
 
+/**
+ * Debug/introspection surface only -- not part of contract v1 (a real
+ * provider has no such endpoint). Lets the acceptance suite verify, from
+ * outside this process, things it otherwise couldn't observe: that this
+ * service really received a given order_id, really fetched a given media_id
+ * via GET /storage, and really reported the media_ids it uploaded back out.
+ */
+function handleAdminJobs(res) {
+  const list = Array.from(jobs.entries()).map(([externalOrderId, job]) => ({
+    external_order_id: externalOrderId,
+    order_id: job.orderId,
+    mode: job.mode,
+    status: job.status,
+    media_ids_provided: job.mediaIds.map((m) => m.media_id),
+    downloaded_media_ids: job.downloadedMediaIds,
+    results: job.results.map((r) => ({ result_number: r.result_number, type: r.type, media_id: r.media_id ?? null })),
+  }));
+  sendJson(res, 200, { jobs: list });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -306,6 +332,7 @@ const server = http.createServer((req, res) => {
     if (route === 'POST /admin/mode') return handleAdminMode(req, res);
     if (route === 'POST /admin/configure') return handleAdminConfigure(req, res);
     if (route === 'POST /admin/reset') return handleAdminReset(req, res);
+    if (route === 'GET /admin/jobs') return handleAdminJobs(res);
     sendJson(res, 404, { message: 'Not found.' });
   };
 

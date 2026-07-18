@@ -2,6 +2,7 @@
 
 const { chromium } = require('playwright');
 const { AdminApi, MarketplaceApi, CoreStubApi, MockControl } = require('./lib/api');
+const db = require('./lib/db');
 
 const ADMIN_URL = 'http://127.0.0.1:3200';
 const MARKETPLACE_URL = 'http://127.0.0.1:3100';
@@ -18,9 +19,14 @@ async function run({ config, report }) {
     adminUrl: ADMIN_URL,
     marketplaceUrl: MARKETPLACE_URL,
     admin: new AdminApi(API_BASE),
+    // The end-customer's own identity: config/core.php's fixed dev-token,
+    // resolved by LocalCoreStub to user_ref=dev-user -- the same identity
+    // NUXT_PUBLIC_DEV_TOKEN wires the marketplace client to use.
+    marketplace: new MarketplaceApi(API_BASE, 'dev-token'),
     core: new CoreStubApi(CORE_STUB_BASE, 'dev-service-credential'),
     mock: new MockControl(`http://127.0.0.1:${config.mockService.port}`),
     mockUrl: `http://127.0.0.1:${config.mockService.port}`,
+    db,
     // Populated as the scenario progresses; later parts read what earlier
     // parts wrote here.
     state: {},

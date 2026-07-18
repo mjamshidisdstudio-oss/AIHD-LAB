@@ -110,6 +110,12 @@ class MockControl {
   health() {
     return call(this.baseUrl, 'GET', '/health');
   }
+
+  async jobs() {
+    const res = await call(this.baseUrl, 'GET', '/admin/jobs');
+    if (!res.ok) throw new Error(`mock-service /admin/jobs failed: HTTP ${res.status}`);
+    return res.data.jobs;
+  }
 }
 
 module.exports = { AdminApi, MarketplaceApi, CoreStubApi, MockControl };

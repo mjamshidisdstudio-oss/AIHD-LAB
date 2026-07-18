@@ -88,6 +88,12 @@ acceptance runner to wait for the process to be ready.
   — real integrators are told this URL once, during onboarding; it isn't
   sent per-request).
 - `POST /admin/reset` — clear all in-memory jobs and reset mode to `normal`.
+- `GET /admin/jobs` — debug/introspection dump of every job this process has
+  seen (order_id, mode, status, the media_ids it was given, the media_ids it
+  actually fetched via `GET /storage`, and the media_ids of its own uploaded
+  results). Lets the acceptance suite prove, from outside this process, that
+  it genuinely received a submission and genuinely fetched an input rather
+  than just trusting its own logs.
 
 ## Modes
 
