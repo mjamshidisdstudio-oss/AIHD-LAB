@@ -79,6 +79,10 @@ async function waitForOrderStatus(ctx, orderId, status, timeoutMs = 8000) {
   return order;
 }
 
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 async function waitForWebhookReceipt(ctx, serviceId, outcome, timeoutMs = 8000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -313,7 +317,14 @@ async function run(ctx, report) {
     // max_get_attempts is 2 in the fast profile; the first attempt already
     // ran synchronously during submit. Drive the remaining attempts
     // explicitly -- nothing in this harness runs the real poll:sweep cron.
+    // SweepPolls only picks up a request once get_interval_s has elapsed
+    // since last_polled_at (its "due" query is a real SQL condition, not a
+    // formality) -- firing poll:sweep back to back with no wait would find
+    // nothing due and silently sweep 0 requests both times.
+    const intervalMs = ctx.config.version.getIntervalS * 1000 + 500;
+    await sleep(intervalMs);
     ctx.runArtisan('poll:sweep'); // 2nd attempt: also times out
+    await sleep(intervalMs);
     ctx.runArtisan('poll:sweep'); // budget spent -> FailureStage::Timeout, no network call needed
 
     const orderRow = await waitForOrderStatus(ctx, orderId, 'failed', 8000);
