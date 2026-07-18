@@ -284,9 +284,12 @@ async function run(ctx, report) {
     const formLocked = await page.locator('.pointer-events-none.opacity-50').count();
     assert.ok(formLocked > 0, 'expected the frozen input form area to be visually/interaction-locked');
 
-    // Back to our own service for the remaining steps.
+    // Back to our own service for the remaining steps. Wait on the tab bar
+    // (always present) rather than the setup checklist -- a full page
+    // reload's SSR + hydration round trip has occasionally taken longer
+    // than 10s in practice.
     await page.goto(`${ctx.adminUrl}/services/${ctx.state.serviceId}?tab=inputs`, { waitUntil: 'load' });
-    await page.waitForSelector('text=Set up this service', { timeout: 10000 });
+    await page.waitForSelector('button:has-text("Integration")', { timeout: 20000 });
   });
 
   await report.step(7, 'Publish v1: status/published_at/current_version_id/consecutive_failures', async () => {
