@@ -184,7 +184,21 @@ async function run(ctx, report) {
     console.log('  [debug] visible buttons:', JSON.stringify(await page.locator('button').allTextContents()));
 
     // Required-image gate: blocked with no toast-satisfying answer yet.
-    await page.locator('button', { hasText: /^Next$/ }).click();
+    const nextBtn = page.locator('button', { hasText: /^Next$/ });
+    try {
+      await nextBtn.click({ timeout: 5000 });
+    } catch (e) {
+      const box = await nextBtn.boundingBox();
+      const hit = box
+        ? await page.evaluate(({ x, y }) => {
+            const el = document.elementFromPoint(x, y);
+            return el ? el.outerHTML.slice(0, 300) : null;
+          }, { x: box.x + box.width / 2, y: box.y + box.height / 2 })
+        : null;
+      console.log('  [debug] Next button boundingBox:', JSON.stringify(box));
+      console.log('  [debug] elementFromPoint at its center:', hit);
+      throw e;
+    }
     await page.waitForSelector('text=This field is required', { timeout: 5000 });
     await page.setInputFiles('input[type="file"]', IMAGE_FIXTURE);
     await page.waitForTimeout(200);
