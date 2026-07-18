@@ -63,11 +63,16 @@ async function run(ctx, report) {
   });
 
   await report.step(34, 'Webhook delivery log: find the bad-signature and malformed-body deliveries from Part 3; the raw body is inspectable', async () => {
+    // The mock sends one webhook per declared output (4, matching this
+    // version) in bad-signature mode, each with the same wrong signature --
+    // so this service genuinely has 4 invalid_signature receipts, not 1.
+    // Match the specific one Part 3 recorded rather than assuming a count.
     const invalidSig = (await ctx.admin.get(`/admin/services/${serviceId}/webhook-deliveries?outcome=invalid_signature`)).data.data;
-    assert.strictEqual(invalidSig.length, 1, 'expected exactly one invalid_signature delivery (Part 3 step 24)');
-    assert.strictEqual(invalidSig[0].id, ctx.state.part3InvalidSignatureDeliveryId, 'expected the log to surface the exact delivery Part 3 recorded');
-    assert.ok(invalidSig[0].raw_body && invalidSig[0].raw_body.length > 0, 'expected the invalid_signature raw body to be inspectable from the log');
-    const parsedSig = JSON.parse(invalidSig[0].raw_body);
+    assert.ok(invalidSig.length >= 1, 'expected at least one invalid_signature delivery (Part 3 step 24)');
+    const matchedSig = invalidSig.find((d) => d.id === ctx.state.part3InvalidSignatureDeliveryId);
+    assert.ok(matchedSig, 'expected the log to surface the exact delivery Part 3 recorded');
+    assert.ok(matchedSig.raw_body && matchedSig.raw_body.length > 0, 'expected the invalid_signature raw body to be inspectable from the log');
+    const parsedSig = JSON.parse(matchedSig.raw_body);
     assert.ok(parsedSig.result_number, 'expected the stored raw_body to be the real rejected payload, not a placeholder');
 
     const malformed = (await ctx.admin.get(`/admin/services/${serviceId}/webhook-deliveries?outcome=validation_error`)).data.data;
