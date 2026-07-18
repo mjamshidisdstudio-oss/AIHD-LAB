@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Services;
 
+use App\Exceptions\External\ExternalServiceReportedFailureException;
 use App\Models\Service;
 use App\Models\ServiceVersion;
 use App\Services\External\HttpExternalServiceClient;
@@ -48,5 +49,33 @@ class HttpExternalServiceClientTest extends TestCase
         (new HttpExternalServiceClient)->poll($version, 'ext-1');
 
         Http::assertSent(fn ($request) => $request->hasHeader('Authorization', 'Bearer shared-secret-456'));
+    }
+
+    /**
+     * Never Again: poll() treated ANY non-"completed" status identically to
+     * "still pending" -- including a provider explicitly reporting failure.
+     * FailureStage::Service could never actually be reached because nothing
+     * ever distinguished "failed" from "not done yet".
+     */
+    public function test_poll_throws_a_distinguishable_exception_when_the_provider_reports_failure(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'failed', 'reason' => 'model unavailable'])]);
+
+        $service = Service::factory()->create(['webhook_signing_key' => 'k']);
+        $version = ServiceVersion::factory()->create(['service_id' => $service->id, 'get_url' => 'https://provider.test/jobs']);
+
+        $this->expectException(ExternalServiceReportedFailureException::class);
+
+        (new HttpExternalServiceClient)->poll($version, 'ext-1');
+    }
+
+    public function test_poll_still_treats_a_merely_pending_status_as_null(): void
+    {
+        Http::fake(['*' => Http::response(['status' => 'processing'])]);
+
+        $service = Service::factory()->create(['webhook_signing_key' => 'k']);
+        $version = ServiceVersion::factory()->create(['service_id' => $service->id, 'get_url' => 'https://provider.test/jobs']);
+
+        $this->assertNull((new HttpExternalServiceClient)->poll($version, 'ext-1'));
     }
 }

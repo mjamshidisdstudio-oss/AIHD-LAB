@@ -124,6 +124,17 @@ order before linking it; a mismatch is rejected outright (webhook outcome
 linked. See `IngestResultTest`/`WebhookControllerTest` for the Never-Again
 coverage.
 
+**Explicit failure, provider → us**: `FailureStage::Service` (as opposed
+to `Post` — our own submit failed — or `Timeout` — it never finished) is
+reached only via one of:
+- Poll: `GET {get_url}` responding `{"status": "failed", "reason": "..."}`.
+- Webhook: `POST /api/webhooks/{service}/results` with `{"external_order_id":
+  "...", "status": "failed", "reason": "..."}` (no `result_number`/`type`
+  — webhook outcome `failure_reported`, HTTP 200).
+Either immediately fails the order (refund + strike), rather than being
+mistaken for "still pending" and left to grind toward a misleading
+Timeout.
+
 ---
 
 ## Part 1 — admin journey (real browser, real data)

@@ -6,6 +6,7 @@ use App\Contracts\ExternalServiceClient;
 use App\Enums\FailureStage;
 use App\Enums\RequestStatus;
 use App\Enums\ResultSource;
+use App\Exceptions\External\ExternalServiceReportedFailureException;
 use App\Models\Request;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
@@ -44,6 +45,15 @@ class PollRequest
 
         try {
             $result = $this->client->poll($version, (string) $request->external_order_id);
+        } catch (ExternalServiceReportedFailureException $e) {
+            // An explicit failure report is not "still pending" -- fail
+            // immediately with FailureStage::Service (refund + strike happen
+            // once), rather than grinding through the attempt budget toward a
+            // misleading Timeout.
+            Log::warning('PollRequest: provider reported failure.', ['request_id' => $request->id, 'reason' => $e->getMessage()]);
+            $this->fail->handle($request, FailureStage::Service);
+
+            return;
         } catch (ConnectionException|RequestException $e) {
             // Still counts toward the attempt budget above -- a
             // permanently-unreachable service must converge to Timeout on a

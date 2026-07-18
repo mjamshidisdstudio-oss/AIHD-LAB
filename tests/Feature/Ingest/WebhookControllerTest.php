@@ -2,12 +2,17 @@
 
 namespace Tests\Feature\Ingest;
 
+use App\Contracts\CoinService;
+use App\Enums\FailureStage;
 use App\Enums\FileKind;
+use App\Enums\OrderStatus;
+use App\Enums\RequestStatus;
 use App\Enums\WebhookOutcome;
 use App\Models\File;
 use App\Models\Order;
 use App\Models\WebhookDelivery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\Concerns\BuildsIngestFixtures;
 use Tests\TestCase;
 
@@ -216,5 +221,45 @@ class WebhookControllerTest extends TestCase
             'http_status' => 403,
         ]);
         $this->assertDatabaseMissing('results', ['request_id' => $request->id, 'result_number' => 1]);
+    }
+
+    /**
+     * Never Again: a provider reporting an explicit failure over the webhook
+     * (rather than a result) must fail the order with FailureStage::Service,
+     * refund coins, and record a strike -- the same as any other failure
+     * path -- not be rejected as validation_error for lacking a
+     * result_number/type it was never going to send.
+     */
+    public function test_a_failure_report_webhook_fails_the_order_with_service_stage(): void
+    {
+        ['service' => $service, 'request' => $request, 'order' => $order] = $this->ingestFixture(
+            signingKey: 'sig-key',
+            orderOverrides: ['coin_txn_ref' => 'txn-webhook-fail'],
+        );
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldReceive('refund')->once()->with('txn-webhook-fail');
+        $coins->shouldNotReceive('settle');
+        $this->app->instance(CoinService::class, $coins);
+
+        $body = json_encode([
+            'external_order_id' => $request->external_order_id,
+            'status' => 'failed',
+            'reason' => 'model unavailable',
+        ]);
+
+        $response = $this->postRaw("/api/webhooks/{$service->id}/results", $body, [
+            'X-Signature' => $this->hmacFor($body, 'sig-key'),
+        ]);
+
+        $response->assertStatus(200)->assertJsonPath('outcome', 'failure_reported');
+
+        $this->assertDatabaseHas('webhook_deliveries', [
+            'service_id' => $service->id,
+            'outcome' => WebhookOutcome::FailureReported->value,
+            'http_status' => 200,
+        ]);
+        $this->assertSame(RequestStatus::Failed, $request->refresh()->status);
+        $this->assertSame(FailureStage::Service, $request->failure_stage);
+        $this->assertSame(OrderStatus::Failed, $order->refresh()->status);
     }
 }

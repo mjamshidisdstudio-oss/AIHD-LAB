@@ -19,4 +19,5 @@ enum WebhookOutcome: string
     case StaleAttempt = 'stale_attempt';
     case ValidationError = 'validation_error';
     case InvalidMediaReference = 'invalid_media_reference';
+    case FailureReported = 'failure_reported';
 }

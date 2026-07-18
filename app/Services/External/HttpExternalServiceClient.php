@@ -3,6 +3,7 @@
 namespace App\Services\External;
 
 use App\Contracts\ExternalServiceClient;
+use App\Exceptions\External\ExternalServiceReportedFailureException;
 use App\Models\ServiceVersion;
 use App\Support\External\ExternalResult;
 use App\Support\External\ExternalResultItem;
@@ -40,7 +41,16 @@ class HttpExternalServiceClient implements ExternalServiceClient
             ->get($version->get_url, ['external_order_id' => $externalOrderId])
             ->throw();
 
-        if ($response->json('status') !== 'completed') {
+        $status = $response->json('status');
+
+        // Distinguish an explicit failure report from "not done yet" -- both
+        // used to fall into the same `!== 'completed'` bucket, so
+        // FailureStage::Service could never actually be reached.
+        if ($status === 'failed') {
+            throw ExternalServiceReportedFailureException::reported($response->json('reason'));
+        }
+
+        if ($status !== 'completed') {
             return null;
         }
 
