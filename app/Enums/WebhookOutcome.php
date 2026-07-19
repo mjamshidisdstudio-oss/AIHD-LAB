@@ -20,4 +20,11 @@ enum WebhookOutcome: string
     case ValidationError = 'validation_error';
     case InvalidMediaReference = 'invalid_media_reference';
     case FailureReported = 'failure_reported';
+
+    /**
+     * A POST /api/storage upload was rejected by the media validation policy
+     * (config/media.php) -- not an inbound webhook delivery, but logged to the
+     * same receipt trail (see StorageController).
+     */
+    case InvalidMedia = 'invalid_media';
 }

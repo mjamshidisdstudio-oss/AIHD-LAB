@@ -2,12 +2,15 @@
 
 namespace App\Services\Ingest;
 
+use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\FileKind;
+use App\Enums\MediaType;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
 use App\Enums\ResultSource;
 use App\Events\OrderCompleted;
+use App\Exceptions\Storage\MediaValidationException;
 use App\Models\File;
 use App\Models\Order;
 use App\Models\Request;
@@ -15,8 +18,8 @@ use App\Models\Result;
 use App\Models\ServiceOutput;
 use App\Support\External\ExternalResultItem;
 use App\Support\Ingest\IngestOutcome;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 /**
@@ -40,11 +43,12 @@ use Illuminate\Support\Str;
  */
 class IngestResult
 {
-    public function __construct(private CoinService $coins) {}
+    public function __construct(private CoinService $coins, private StoreMedia $storeMedia) {}
 
     public function handle(Request $request, ExternalResultItem $item, ResultSource $source, int $latencyMs): IngestOutcome
     {
         $referencedFile = null;
+        $inlineFile = null;
 
         if ($item->hasMediaReference()) {
             $referencedFile = File::query()->find($item->mediaId);
@@ -56,6 +60,29 @@ class IngestResult
             // silently dropping just the file reference.
             if ($referencedFile === null || $referencedFile->order_id !== $request->order_id) {
                 return IngestOutcome::rejected('invalid_media_reference');
+            }
+        } elseif ($item->isFile()) {
+            // Inline bytes (content_base64), not a pre-uploaded media_id --
+            // routed through the SAME shared StoreMedia path POST /api/storage
+            // uses (config/media.php's per-type mime allow-list and size
+            // ceiling, checked against the REAL content-sniffed mime, never
+            // the delivery's own claimed one). Validated and written before
+            // the upsert below, same as the media-reference check above, so a
+            // rejected delivery never creates a `results` row at all.
+            //
+            // $item->type is an unvalidated string straight from the
+            // delivery's own payload -- tryFrom (not from) so a provider
+            // sending anything outside image/video/text is a normal
+            // rejection, not an uncaught ValueError.
+            $mediaType = MediaType::tryFrom($item->type);
+            if ($mediaType === null) {
+                return IngestOutcome::rejected('invalid_media');
+            }
+
+            try {
+                $inlineFile = $this->storeInlineBytes($request, $item, $mediaType);
+            } catch (MediaValidationException) {
+                return IngestOutcome::rejected('invalid_media');
             }
         }
 
@@ -86,20 +113,8 @@ class IngestResult
             return IngestOutcome::duplicate();
         }
 
-        if ($item->isFile()) {
-            $path = "results/{$request->order_id}/{$item->resultNumber}{$this->extensionFor($item->mime)}";
-            Storage::disk('media')->put($path, $item->bytes);
-
-            $file = File::create([
-                'kind' => FileKind::Result,
-                'disk' => 'media',
-                'order_id' => $request->order_id,
-                'mime' => $item->mime,
-                'path' => $path,
-                'size' => strlen((string) $item->bytes),
-            ]);
-
-            $stored->update(['file_id' => $file->id]);
+        if ($inlineFile !== null) {
+            $stored->update(['file_id' => $inlineFile->id]);
         } elseif ($referencedFile !== null) {
             // Already uploaded (and ownership-verified above) via POST
             // /storage -- link directly, never re-store its bytes.
@@ -107,6 +122,31 @@ class IngestResult
         }
 
         return IngestOutcome::ingested($this->completeIfAllResultsIn($request));
+    }
+
+    /**
+     * Writes inline-delivered bytes through StoreMedia by wrapping them in a
+     * real UploadedFile pointed at a throwaway temp file -- this is what lets
+     * getMimeType() genuinely content-sniff the bytes (Symfony's real
+     * detection only runs against an actual file on disk), rather than
+     * trusting whatever mime the delivery claims.
+     */
+    private function storeInlineBytes(Request $request, ExternalResultItem $item, MediaType $mediaType): File
+    {
+        $order = $request->relationLoaded('order') ? $request->order : $request->order()->firstOrFail();
+
+        $tmpPath = tempnam(sys_get_temp_dir(), 'ingest-media-');
+        file_put_contents($tmpPath, (string) $item->bytes);
+
+        try {
+            $uploadedFile = new UploadedFile($tmpPath, "result-{$item->resultNumber}", null, null, true);
+
+            return $this->storeMedia->handle($order, $uploadedFile, FileKind::Result, $mediaType);
+        } finally {
+            if (file_exists($tmpPath)) {
+                @unlink($tmpPath);
+            }
+        }
     }
 
     /**
@@ -162,15 +202,5 @@ class IngestResult
         $order->service()->update(['consecutive_failures' => 0]);
 
         OrderCompleted::dispatch($order);
-    }
-
-    private function extensionFor(?string $mime): string
-    {
-        return match ($mime) {
-            'image/png' => '.png',
-            'image/jpeg' => '.jpg',
-            'video/mp4' => '.mp4',
-            default => '',
-        };
     }
 }

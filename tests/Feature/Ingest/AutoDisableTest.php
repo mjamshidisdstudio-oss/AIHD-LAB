@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ingest;
 
+use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\FailureStage;
 use App\Enums\ResultSource;
@@ -69,7 +70,7 @@ class AutoDisableTest extends TestCase
 
         // A completed order resets the streak.
         ['request' => $successRequest] = $this->ingestFixture(service: $service);
-        $ingest = new IngestResult(app(CoinService::class));
+        $ingest = new IngestResult(app(CoinService::class), app(StoreMedia::class));
         $ingest->handle($successRequest, new ExternalResultItem(resultNumber: 1, type: 'text', text: 'ok'), ResultSource::Webhook, 100);
         $this->assertSame(0, $service->refresh()->consecutive_failures);
         $this->assertSame(ServiceStatus::Active, $service->status);

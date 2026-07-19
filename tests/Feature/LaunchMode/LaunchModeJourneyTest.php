@@ -22,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Tests\Concerns\GeneratesFakeMedia;
 use Tests\TestCase;
 
 /**
@@ -37,7 +38,7 @@ use Tests\TestCase;
  */
 class LaunchModeJourneyTest extends TestCase
 {
-    use RefreshDatabase;
+    use GeneratesFakeMedia, RefreshDatabase;
 
     private function publishedService(int $coinCost): Service
     {
@@ -75,7 +76,7 @@ class LaunchModeJourneyTest extends TestCase
                 'status' => 'completed',
                 'latency_ms' => 400,
                 'results' => [
-                    ['result_number' => 1, 'type' => 'image', 'mime' => 'image/png', 'content_base64' => base64_encode('IMG-BYTES')],
+                    ['result_number' => 1, 'type' => 'image', 'mime' => 'image/png', 'content_base64' => $this->fakePngBase64()],
                 ],
             ]),
         ]);

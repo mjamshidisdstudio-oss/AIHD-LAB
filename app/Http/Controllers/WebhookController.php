@@ -81,6 +81,7 @@ class WebhookController extends Controller
         );
 
         $webhookOutcome = match (true) {
+            $outcome->rejectedReason === 'invalid_media' => WebhookOutcome::InvalidMedia,
             $outcome->wasRejected() => WebhookOutcome::InvalidMediaReference,
             $outcome->duplicate => WebhookOutcome::Duplicate,
             default => WebhookOutcome::Ingested,

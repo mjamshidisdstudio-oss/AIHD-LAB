@@ -56,8 +56,11 @@ class DevServiceController extends Controller
                 $item['text'] = "Mock text result #{$output['result_number']}";
             } else {
                 $item['mime'] = $type === 'video' ? 'video/mp4' : 'image/png';
+                // Genuinely content-sniffable bytes, not placeholder text --
+                // Phase L4's media validation checks the REAL sniffed mime,
+                // not this claimed one, so it must actually match.
                 $item['content_base64'] = base64_encode(
-                    "AIHD-MOCK-{$type}-{$output['result_number']}"
+                    $type === 'video' ? $this->fakeMp4Bytes() : $this->fakePngBytes()
                 );
             }
 
@@ -69,5 +72,25 @@ class DevServiceController extends Controller
             'latency_ms' => 1234,
             'results' => $results,
         ]);
+    }
+
+    /**
+     * A tiny real PNG, GD-generated -- sniffs as image/png.
+     */
+    private function fakePngBytes(): string
+    {
+        ob_start();
+        imagepng(imagecreatetruecolor(2, 2));
+
+        return ob_get_clean();
+    }
+
+    /**
+     * A minimal valid MP4 "ftyp" box -- not a playable video, but a genuine
+     * ISO-BMFF header that sniffs as video/mp4.
+     */
+    private function fakeMp4Bytes(): string
+    {
+        return pack('N', 24).'ftyp'.'isom'.pack('N', 512).'isom'.'mp41';
     }
 }

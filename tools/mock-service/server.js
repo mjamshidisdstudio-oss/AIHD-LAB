@@ -91,9 +91,10 @@ async function downloadMedia(mediaId, job) {
   return { buf, mime };
 }
 
-async function uploadResult(orderId, buf, mime, filename) {
+async function uploadResult(orderId, buf, mime, filename, resultNumber) {
   const form = new FormData();
   form.append('order_id', orderId);
+  form.append('result_number', String(resultNumber));
   form.append('file', new Blob([buf], { type: mime }), filename);
 
   const res = await fetch(`${OUR_BASE_URL}/api/storage`, {
@@ -128,16 +129,45 @@ async function postWebhook(body, { badSignature = false } = {}) {
 
 /**
  * A deterministic, dependency-free stand-in for "resize/tint/whatever": XOR
- * every byte with a constant derived from the result_number, so each output
- * is a genuine, different transform of the real input bytes -- never a copy
- * of the input, and never identical across result_numbers.
+ * every byte AFTER the format's magic-byte header with a constant derived
+ * from the result_number, so each output is a genuine, different transform of
+ * the real input bytes -- never a copy of the input, and never identical
+ * across result_numbers. The header itself is left untouched: our platform's
+ * media validation checks the file's REAL, content-sniffed mime type, and
+ * XOR-ing a format's magic number along with everything else would make a
+ * genuine transform indistinguishable from corrupted/unrecognizable bytes.
  */
+const TINT_HEADER_BYTES = 16;
+
 function tint(buf, resultNumber) {
   const key = ((resultNumber * 37 + 11) % 251) || 1;
-  const out = Buffer.alloc(buf.length);
-  for (let i = 0; i < buf.length; i++) out[i] = buf[i] ^ key;
+  const out = Buffer.from(buf);
+  for (let i = TINT_HEADER_BYTES; i < out.length; i++) out[i] = out[i] ^ key;
   return out;
 }
+
+/**
+ * Minimal, genuinely content-sniffable placeholder bytes -- used only when
+ * there is no real input to base a transform on (an output of this type with
+ * no matching input to fetch and tint).
+ */
+const FALLBACK_BYTES = {
+  image: Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), // PNG signature
+    Buffer.from([0x00, 0x00, 0x00, 0x0d]), // IHDR chunk length (13)
+    Buffer.from('IHDR'),
+    Buffer.from([0, 0, 0, 1, 0, 0, 0, 1, 0x08, 0x02, 0, 0, 0]), // 1x1, 8-bit RGB
+    Buffer.from([0, 0, 0, 0]), // CRC -- not checked by content-sniffing
+  ]),
+  video: Buffer.concat([
+    Buffer.from([0x00, 0x00, 0x00, 0x18]), // box size (24)
+    Buffer.from('ftyp'),
+    Buffer.from('isom'),
+    Buffer.from([0x00, 0x00, 0x02, 0x00]), // minor version
+    Buffer.from('isom'),
+    Buffer.from('mp41'),
+  ]),
+};
 
 async function processJob(externalOrderId) {
   const job = jobs.get(externalOrderId);
@@ -164,10 +194,10 @@ async function processJob(externalOrderId) {
         continue;
       }
 
-      const base = inputImage ? inputImage.buf : Buffer.from(`AIHD-MOCK-${output.type}-${output.result_number}`);
+      const base = inputImage ? inputImage.buf : (FALLBACK_BYTES[output.type] ?? FALLBACK_BYTES.image);
       const mime = inputImage ? inputImage.mime : (output.type === 'video' ? 'video/mp4' : 'image/png');
       const transformed = tint(base, output.result_number);
-      const mediaId = await uploadResult(job.orderId, transformed, mime, `result-${output.result_number}`);
+      const mediaId = await uploadResult(job.orderId, transformed, mime, `result-${output.result_number}`, output.result_number);
       results.push({ result_number: output.result_number, type: output.type, media_id: mediaId });
     }
 

@@ -28,9 +28,11 @@ class SubmitOrderRequest extends FormRequest
             // (which inputs are mandatory) are enforced by SubmitOrder against the
             // published version.
             'answers' => ['sometimes', 'array'],
-            // File answers keyed by input slug (image/video inputs).
+            // File answers keyed by input slug (image/video inputs). Format
+            // and size are enforced per-type by StoreMedia (config/media.php)
+            // -- not here, so there is exactly one place that policy lives.
             'files' => ['sometimes', 'array'],
-            'files.*' => ['file', 'max:10240'],
+            'files.*' => ['file'],
         ];
     }
 }

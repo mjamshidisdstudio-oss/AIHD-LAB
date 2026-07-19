@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Ingest;
 
+use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\FailureStage;
 use App\Enums\FileKind;
@@ -61,7 +62,7 @@ class IngestResultTest extends TestCase
             ? [ResultSource::Webhook, ResultSource::Poll]
             : [ResultSource::Poll, ResultSource::Webhook];
 
-        $ingest = new IngestResult($coins);
+        $ingest = new IngestResult($coins, app(StoreMedia::class));
         foreach ($sources as $source) {
             $ingest->handle($request, $item, $source, latencyMs: 250);
         }
@@ -86,7 +87,7 @@ class IngestResultTest extends TestCase
 
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldReceive('settle')->once()->with('txn-counted');
-        $ingest = new IngestResult($coins);
+        $ingest = new IngestResult($coins, app(StoreMedia::class));
 
         $ingest->handle($request, new ExternalResultItem(resultNumber: 1, type: 'text', text: 'one'), ResultSource::Poll, 100);
 
@@ -116,7 +117,7 @@ class IngestResultTest extends TestCase
 
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldReceive('settle')->once()->with('txn-post-complete');
-        $ingest = new IngestResult($coins);
+        $ingest = new IngestResult($coins, app(StoreMedia::class));
 
         $item = new ExternalResultItem(resultNumber: 1, type: 'text', text: 'first');
         $ingest->handle($request, $item, ResultSource::Webhook, 100);
@@ -155,7 +156,7 @@ class IngestResultTest extends TestCase
         $this->assertSame(OrderStatus::Failed, $order->refresh()->status);
 
         // A late webhook now delivers the result the sweep gave up waiting for.
-        $ingest = new IngestResult($coins);
+        $ingest = new IngestResult($coins, app(StoreMedia::class));
         $outcome = $ingest->handle(
             $request,
             new ExternalResultItem(resultNumber: 1, type: 'text', text: 'too late'),
@@ -193,7 +194,7 @@ class IngestResultTest extends TestCase
         $coins->shouldNotReceive('settle');
         $coins->shouldNotReceive('refund');
 
-        $outcome = (new IngestResult($coins))->handle(
+        $outcome = (new IngestResult($coins, app(StoreMedia::class)))->handle(
             $request,
             new ExternalResultItem(resultNumber: 1, type: 'image', mediaId: $foreignFile->id),
             ResultSource::Webhook,
@@ -227,7 +228,7 @@ class IngestResultTest extends TestCase
         $coins = Mockery::mock(CoinService::class);
         $coins->shouldReceive('settle')->once()->with('txn-media-ref');
 
-        $outcome = (new IngestResult($coins))->handle(
+        $outcome = (new IngestResult($coins, app(StoreMedia::class)))->handle(
             $request,
             new ExternalResultItem(resultNumber: 1, type: 'image', mediaId: $ownFile->id),
             ResultSource::Webhook,
@@ -238,5 +239,36 @@ class IngestResultTest extends TestCase
         $this->assertSame(1, File::where('order_id', $order->id)->count());
         $this->assertDatabaseHas('results', ['request_id' => $request->id, 'result_number' => 1, 'file_id' => $ownFile->id]);
         Event::assertDispatchedTimes(OrderCompleted::class, 1);
+    }
+
+    /**
+     * Never Again: an inline-bytes delivery whose `type` isn't one of
+     * image/video/text (an external service's own unvalidated claim) is
+     * rejected like any other invalid media -- not an uncaught ValueError from
+     * MediaType::from(), which would surface as a 500 instead of a controlled
+     * rejection for exactly the kind of malformed input this policy exists to
+     * catch.
+     */
+    public function test_inline_bytes_with_unrecognized_type_is_rejected_not_a_crash(): void
+    {
+        Event::fake([OrderCompleted::class]);
+        ['request' => $request, 'order' => $order] = $this->ingestFixture(declaredOutputs: 1);
+
+        $coins = Mockery::mock(CoinService::class);
+        $coins->shouldNotReceive('settle');
+        $coins->shouldNotReceive('refund');
+
+        $outcome = (new IngestResult($coins, app(StoreMedia::class)))->handle(
+            $request,
+            new ExternalResultItem(resultNumber: 1, type: 'banana', bytes: 'some-bytes'),
+            ResultSource::Webhook,
+            100,
+        );
+
+        $this->assertTrue($outcome->wasRejected());
+        $this->assertSame('invalid_media', $outcome->rejectedReason);
+        $this->assertSame(0, Result::where('request_id', $request->id)->count());
+        $this->assertSame(OrderStatus::Processing, $order->refresh()->status);
+        Event::assertNotDispatched(OrderCompleted::class);
     }
 }

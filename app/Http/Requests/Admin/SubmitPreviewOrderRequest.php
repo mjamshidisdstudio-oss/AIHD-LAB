@@ -21,8 +21,11 @@ class SubmitPreviewOrderRequest extends FormRequest
         return [
             'entry_mode' => ['sometimes', Rule::enum(EntryMode::class)],
             'answers' => ['sometimes', 'array'],
+            // Format and size are enforced per-type by StoreMedia
+            // (config/media.php) -- not here, so there is exactly one place
+            // that policy lives.
             'files' => ['sometimes', 'array'],
-            'files.*' => ['file', 'max:10240'],
+            'files.*' => ['file'],
         ];
     }
 }

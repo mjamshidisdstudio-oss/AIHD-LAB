@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\Concerns\ActsAsCoreUser;
+use Tests\Concerns\GeneratesFakeMedia;
 use Tests\TestCase;
 
 /**
@@ -33,7 +34,7 @@ use Tests\TestCase;
  */
 class WalkingSkeletonTest extends TestCase
 {
-    use ActsAsCoreUser, RefreshDatabase;
+    use ActsAsCoreUser, GeneratesFakeMedia, RefreshDatabase;
 
     private function publishedService(): Service
     {
@@ -68,7 +69,7 @@ class WalkingSkeletonTest extends TestCase
                 'status' => 'completed',
                 'latency_ms' => 500,
                 'results' => [
-                    ['result_number' => 1, 'type' => 'image', 'mime' => 'image/png', 'content_base64' => base64_encode('IMG-BYTES')],
+                    ['result_number' => 1, 'type' => 'image', 'mime' => 'image/png', 'content_base64' => $this->fakePngBase64()],
                     ['result_number' => 2, 'type' => 'text', 'text' => 'a cosy cabin at dusk'],
                 ],
             ]),

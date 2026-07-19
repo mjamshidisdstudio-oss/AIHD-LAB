@@ -4,6 +4,7 @@ use App\Exceptions\Auth\InvalidTokenException;
 use App\Exceptions\Catalog\CatalogException;
 use App\Exceptions\Coins\InsufficientCoinsException;
 use App\Exceptions\Core\CoreServiceUnavailableException;
+use App\Exceptions\Storage\MediaValidationException;
 use App\Http\Middleware\SiteAuth;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -85,6 +86,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (CoreServiceUnavailableException $e, Request $request) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 return response()->json(['message' => $e->getMessage()], $e->status);
+            }
+
+            return null;
+        });
+
+        // Our own input-upload path (StoreMedia via SubmitOrder) never
+        // distinguishes a mime-mismatch from an oversized file -- both are
+        // 422 here. POST /api/storage (StorageController) catches this
+        // exception directly instead, before it ever reaches this callback,
+        // since that endpoint's contract does distinguish the two (413 vs 422).
+        $exceptions->render(function (MediaValidationException $e, Request $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json(['message' => $e->getMessage()], 422);
             }
 
             return null;

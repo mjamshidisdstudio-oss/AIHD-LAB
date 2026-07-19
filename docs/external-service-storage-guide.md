@@ -66,8 +66,13 @@ Authorization: Bearer <webhook_signing_key>
 Content-Type: multipart/form-data
 
 order_id=<the order id from your job payload>
+result_number=<which declared output this is, matching expected_outputs>
 file=<the result's raw bytes>
 ```
+
+`result_number` is required — it is how we know which output this file is
+*supposed* to be, so its real content can be checked against that output's
+declared type (see "Media validation policy" below).
 
 **Success** — `201`:
 
@@ -85,10 +90,42 @@ this response.
 | Status | Meaning |
 |---|---|
 | `401` | Missing or wrong bearer token. |
-| `422` | Unknown `order_id`, or no `file` present. |
-| `413` | File exceeds the upload ceiling (10 MiB). |
+| `422` | Unknown `order_id`, no `file` present, missing/unknown `result_number`, or the file's real content isn't an allowed format for that output's declared type. |
+| `413` | File exceeds that output type's size ceiling. |
 
 Never a `500`.
+
+## Media validation policy
+
+Every upload — yours here, and a user's own input upload on our side — is
+checked against the SAME policy, keyed by media type (`image`, `video`,
+`text`), before it is ever written to storage:
+
+| Type | Default allowed formats | Default size ceiling |
+|---|---|---|
+| `image` | PNG, JPEG, WebP, AVIF | 25 MiB |
+| `video` | MP4, WebM | 500 MiB |
+| `text` | JSON, plain text | 1 MiB |
+
+(These are this deployment's defaults, config-driven — an operator may have
+tightened or loosened them; if your uploads are unexpectedly rejected, ask
+the operator what this deployment's actual limits are, rather than assuming
+the table above.)
+
+Two things this checks, specifically:
+
+- **Format.** Your file's real content is inspected (genuine content
+  detection, not your claimed `Content-Type` or the filename) and compared
+  against the allow-list for the *declared* output type (`result_number`'s
+  own type, from `expected_outputs`) — never your own upload's filename or
+  claimed mime. Uploading a video for an output your job declared as `image`
+  is rejected, even if you label it correctly; the declared type is what's
+  authoritative.
+- **Size.** Checked per type, not a single flat number — a video can be far
+  larger than an image before either is rejected.
+
+A rejected upload never partially writes: nothing is stored, and no
+`media_id` is issued.
 
 ## End-to-end example
 
@@ -117,4 +154,8 @@ real integrator.
 - Never retry a `POST /api/storage` call on a `401`/`422`/`413` expecting a
   different result — those are the service's stated, stable answer for that
   request; the fix is on your side (a rotated key, an order you don't
-  recognize, a file that's too large), not a transient condition.
+  recognize, a file that's too large or the wrong format for that output),
+  not a transient condition.
+- Never try to work around a format rejection by relabeling a file's
+  `Content-Type` or extension — the check is against the file's real
+  content, not what you call it.

@@ -6,6 +6,7 @@ use App\Actions\Catalog\PublishVersion;
 use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\FileKind;
+use App\Enums\MediaType;
 use App\Enums\ServiceInputType;
 use App\Jobs\DispatchRequest;
 use App\Models\Order;
@@ -103,7 +104,7 @@ class StorageMediaTest extends TestCase
         $service = Service::factory()->create();
         $order = Order::factory()->create(['service_id' => $service->id, 'service_version_id' => ServiceVersion::factory()->create(['service_id' => $service->id])->id]);
 
-        $file = app(StoreMedia::class)->handle($order, UploadedFile::fake()->image('swap-test.png'), FileKind::Input);
+        $file = app(StoreMedia::class)->handle($order, UploadedFile::fake()->image('swap-test.png'), FileKind::Input, MediaType::Image);
 
         $this->assertSame('media', $file->disk);
         $this->assertTrue(Storage::disk('media')->exists($file->path));
