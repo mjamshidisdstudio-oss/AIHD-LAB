@@ -23,6 +23,7 @@ async function download(result: OrderResult) {
     const auth = useAuthStore()
     const blob = await $fetch<Blob>(`/marketplace/results/${result.id}/download`, {
       baseURL: config.public.apiBase,
+      credentials: 'include',
       headers: { Accept: '*/*', ...auth.authHeader },
       responseType: 'blob',
     })
