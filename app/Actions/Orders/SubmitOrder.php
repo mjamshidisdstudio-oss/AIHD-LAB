@@ -2,6 +2,7 @@
 
 namespace App\Actions\Orders;
 
+use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\EntryMode;
 use App\Enums\FileKind;
@@ -11,14 +12,12 @@ use App\Enums\RequestStatus;
 use App\Enums\ServiceInputType;
 use App\Exceptions\Orders\ServiceUnavailableForOrdersException;
 use App\Jobs\DispatchRequest;
-use App\Models\File;
 use App\Models\Order;
 use App\Models\Service;
 use App\Models\ServiceInput;
 use App\Models\ServiceVersion;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -41,7 +40,7 @@ use Illuminate\Validation\ValidationException;
  */
 class SubmitOrder
 {
-    public function __construct(private CoinService $coins) {}
+    public function __construct(private CoinService $coins, private StoreMedia $storeMedia) {}
 
     /**
      * @param  array<string, mixed>  $answers  input slug => scalar value or option slug(s)
@@ -183,16 +182,10 @@ class SubmitOrder
             return;
         }
 
-        $path = Storage::disk('media')->putFile("inputs/{$order->id}", $file);
-
-        $fileModel = File::create([
-            'kind' => FileKind::Input,
-            'disk' => 'media',
-            'order_id' => $order->id,
-            'mime' => $file->getMimeType() ?? 'application/octet-stream',
-            'path' => $path,
-            'size' => $file->getSize() ?? 0,
-        ]);
+        // Same action StorageController::store() calls for an external
+        // service's result upload -- our own input upload is not a separate,
+        // direct-to-disk path.
+        $fileModel = $this->storeMedia->handle($order, $file, FileKind::Input);
 
         $orderInput = $order->inputs()->create(['input_id' => $input->id]);
         $orderInput->files()->create(['file_id' => $fileModel->id, 'position' => 0]);

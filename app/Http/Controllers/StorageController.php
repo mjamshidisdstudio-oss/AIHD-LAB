@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Storage\StoreMedia;
 use App\Enums\FileKind;
 use App\Models\File;
 use App\Models\Order;
@@ -47,7 +48,7 @@ class StorageController extends Controller
         );
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, StoreMedia $storeMedia): JsonResponse
     {
         $bearer = $request->bearerToken();
         if ($bearer === null || $bearer === '') {
@@ -72,16 +73,10 @@ class StorageController extends Controller
             return response()->json(['message' => 'Payload too large.'], 413);
         }
 
-        $path = Storage::disk('media')->putFile("results/{$order->id}", $upload);
-
-        $file = File::create([
-            'kind' => FileKind::Result,
-            'disk' => 'media',
-            'order_id' => $order->id,
-            'mime' => $upload->getMimeType() ?? 'application/octet-stream',
-            'path' => $path,
-            'size' => $upload->getSize() ?? 0,
-        ]);
+        // External services only ever store results here -- an input is
+        // something WE upload on the user's behalf, via this same action,
+        // from SubmitOrder.
+        $file = $storeMedia->handle($order, $upload, FileKind::Result);
 
         return response()->json(['media_id' => $file->id], 201);
     }
