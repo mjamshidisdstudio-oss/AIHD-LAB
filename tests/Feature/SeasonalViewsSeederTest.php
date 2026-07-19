@@ -27,7 +27,7 @@ class SeasonalViewsSeederTest extends TestCase
 
         $version = $service->currentVersion;
         $this->assertSame(ServiceVersionStatus::Published, $version->status);
-        $this->assertSame(2, $version->coin_cost);
+        $this->assertSame(0, $version->coin_cost);
         $this->assertSame(3, $version->regenerate_limit);
         $this->assertSame(120, $version->response_timeout_s);
         $this->assertSame(30, $version->get_interval_s);
