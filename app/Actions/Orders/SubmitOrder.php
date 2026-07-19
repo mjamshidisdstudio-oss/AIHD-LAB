@@ -6,6 +6,7 @@ use App\Actions\Storage\StoreMedia;
 use App\Contracts\CoinService;
 use App\Enums\EntryMode;
 use App\Enums\FileKind;
+use App\Enums\MediaType;
 use App\Enums\OrderSource;
 use App\Enums\OrderStatus;
 use App\Enums\RequestStatus;
@@ -184,8 +185,9 @@ class SubmitOrder
 
         // Same action StorageController::store() calls for an external
         // service's result upload -- our own input upload is not a separate,
-        // direct-to-disk path.
-        $fileModel = $this->storeMedia->handle($order, $file, FileKind::Input);
+        // direct-to-disk path. The input's own declared type IS the expected
+        // media type here (Image/Video are the only file-bearing input types).
+        $fileModel = $this->storeMedia->handle($order, $file, FileKind::Input, MediaType::from($input->type->value));
 
         $orderInput = $order->inputs()->create(['input_id' => $input->id]);
         $orderInput->files()->create(['file_id' => $fileModel->id, 'position' => 0]);
