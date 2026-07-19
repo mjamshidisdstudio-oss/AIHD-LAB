@@ -53,7 +53,12 @@ class SeasonalViewsSeeder extends Seeder
                 ['service_id' => $service->id, 'version_no' => 1],
                 [
                     'status' => ServiceVersionStatus::Draft,
-                    'coin_cost' => 2,
+                    // Phase L2 launch mode: every seeded/launch service is
+                    // coin-free (renders the existing Free badge) so the
+                    // no-billing launch path has nothing to charge in the
+                    // first place, on top of CoinService itself being a
+                    // no-op when LAB_BILLING_ENABLED=false.
+                    'coin_cost' => 0,
                     'regenerate_limit' => 3,
                     'response_timeout_s' => 120,
                     'get_interval_s' => 30,

@@ -4,7 +4,7 @@ use App\Exceptions\Auth\InvalidTokenException;
 use App\Exceptions\Catalog\CatalogException;
 use App\Exceptions\Coins\InsufficientCoinsException;
 use App\Exceptions\Core\CoreServiceUnavailableException;
-use App\Http\Middleware\AuthenticateWithCoreToken;
+use App\Http\Middleware\SiteAuth;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -29,8 +29,19 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->statefulApi();
+
+        // Phase L2 launch mode: with no core-team login available yet,
+        // LAB_AUTH_MODE=anonymous swaps the real auth path to AnonymousAuth (a
+        // stable per-browser identity, no token) instead of
+        // AuthenticateWithCoreToken (a real core bearer token). 'auth.core'
+        // always resolves to SiteAuth, a thin gate that decides between the
+        // two at request time -- see that class for why the decision can't be
+        // made here, at boot. Every route using 'auth.core' picks up a flag
+        // flip with no route-file change, and flipping it back is a config
+        // change, not a code change. AuthenticateWithCoreToken itself is
+        // untouched either way.
         $middleware->alias([
-            'auth.core' => AuthenticateWithCoreToken::class,
+            'auth.core' => SiteAuth::class,
         ]);
         // Authenticate before route-model binding resolves {order}, so a
         // missing/invalid token is rejected as 401 rather than leaking a 404
@@ -42,7 +53,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // request.
         $middleware->prependToPriorityList(
             before: ThrottleRequests::class,
-            prepend: AuthenticateWithCoreToken::class,
+            prepend: SiteAuth::class,
         );
     })
     ->withExceptions(function (Exceptions $exceptions) {
