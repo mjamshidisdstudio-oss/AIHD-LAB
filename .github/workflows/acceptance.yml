@@ -101,3 +101,70 @@ jobs:
           ACCEPTANCE_DB_PASSWORD: root
           ACCEPTANCE_PROFILE: ${{ github.event.inputs.profile || 'fast' }}
         run: composer acceptance
+
+  # Phase L3: the opposite corner of the same LAB_BILLING_ENABLED/
+  # LAB_AUTH_MODE flag space, run as its own job (own runner/VM, so no
+  # port/DB contention with the job above) rather than a step in it -- this
+  # does not touch or depend on the existing 35-step suite in any way.
+  acceptance-launch-mode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, bcmath, pdo, mysql, pdo_mysql
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Install Node dependencies (marketplace)
+        run: npm ci
+        working-directory: marketplace
+
+      - name: Install Node dependencies (acceptance suite)
+        run: npm ci
+        working-directory: tests/Acceptance
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: tests/Acceptance
+
+      - name: Run launch-mode acceptance scenario
+        env:
+          ACCEPTANCE_DB_ROOT_USER: root
+          ACCEPTANCE_DB_ROOT_PASSWORD: root
+          ACCEPTANCE_DB_USERNAME: root
+          ACCEPTANCE_DB_PASSWORD: root
+          ACCEPTANCE_PROFILE: ${{ github.event.inputs.profile || 'fast' }}
+        run: composer acceptance:launch-mode

@@ -64,6 +64,18 @@
         "acceptance:realistic": [
             "Composer\\Config::disableProcessTimeout",
             "node tests/Acceptance/run.js --profile=realistic"
+        ],
+        "acceptance:launch-mode": [
+            "Composer\\Config::disableProcessTimeout",
+            "node tests/Acceptance/run-launch-mode.js"
+        ],
+        "acceptance:launch-mode:realistic": [
+            "Composer\\Config::disableProcessTimeout",
+            "node tests/Acceptance/run-launch-mode.js --profile=realistic"
+        ],
+        "acceptance:all": [
+            "Composer\\Config::disableProcessTimeout",
+            "node tests/Acceptance/run-all.js"
         ]
     },
     "extra": {
