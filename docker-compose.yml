@@ -81,7 +81,7 @@ services:
       - aihd_storage_data:/var/www/html/storage/app/private
       - aihd_logs:/var/www/html/storage/logs
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8080:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
       interval: 30s
@@ -106,7 +106,7 @@ services:
       NUXT_PUBLIC_PUSHER_SCHEME: "https"
       NUXT_PUBLIC_PUSHER_APP_CLUSTER: "mt1"
     ports:
-      - "127.0.0.1:3000:3000"
+      - "127.0.0.1:3100:3000"
     depends_on:
       app:
         condition: service_healthy
