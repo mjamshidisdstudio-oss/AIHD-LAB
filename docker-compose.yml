@@ -1,0 +1,125 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: aihd-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_DATABASE:-aihd_lab}
+      MYSQL_USER: ${DB_USERNAME:-aihd}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-aihd}
+    volumes:
+      - aihd_mysql_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - aihd_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: aihd-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - aihd_redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - aihd_net
+
+  app:
+    build:
+      context: .
+      dockerfile: infra/docker/php/Dockerfile
+    container_name: aihd-app
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      APP_DEBUG: ${APP_DEBUG:-false}
+      APP_KEY: ${APP_KEY}
+      APP_URL: ${APP_URL:-https://aihd-lab.example.com}
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${DB_DATABASE:-aihd_lab}
+      DB_USERNAME: ${DB_USERNAME:-aihd}
+      DB_PASSWORD: ${DB_PASSWORD:-aihd}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      CACHE_STORE: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: redis
+      BROADCAST_CONNECTION: log
+      FILESYSTEM_DISK: local
+      MEDIA_DRIVER: local
+      LOG_CHANNEL: stack
+      LOG_STACK: single
+      LOG_LEVEL: ${LOG_LEVEL:-warning}
+      CORE_BASE_URL: ${CORE_BASE_URL:-http://app/dev/core}
+      CORE_SERVICE_CREDENTIAL: ${CORE_SERVICE_CREDENTIAL:-dev-service-credential}
+      CORE_STUB_DEV_TOKEN: ${CORE_STUB_DEV_TOKEN:-dev-token}
+      CORE_STUB_DEV_USER_REF: ${CORE_STUB_DEV_USER_REF:-dev-user}
+      CORE_STUB_SEED_BALANCE: 1000
+    volumes:
+      - aihd_media_data:/var/www/html/storage/app/media
+      - aihd_storage_data:/var/www/html/storage/app/private
+      - aihd_logs:/var/www/html/storage/logs
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - aihd_net
+
+  marketplace:
+    build:
+      context: .
+      dockerfile: infra/docker/marketplace/Dockerfile
+    container_name: aihd-marketplace
+    restart: unless-stopped
+    environment:
+      NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-https://aihd-lab.example.com/api}
+      NUXT_PUBLIC_DEV_TOKEN: ${NUXT_PUBLIC_DEV_TOKEN:-dev-token}
+      NUXT_PUBLIC_PUSHER_APP_KEY: ""
+      NUXT_PUBLIC_PUSHER_HOST: ""
+      NUXT_PUBLIC_PUSHER_PORT: "443"
+      NUXT_PUBLIC_PUSHER_SCHEME: "https"
+      NUXT_PUBLIC_PUSHER_APP_CLUSTER: "mt1"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - aihd_net
+
+volumes:
+  aihd_mysql_data:
+  aihd_redis_data:
+  aihd_media_data:
+  aihd_storage_data:
+  aihd_logs:
+
+networks:
+  aihd_net:
+    driver: bridge
