@@ -6,11 +6,9 @@ Add these **Repository Secrets** in `Settings → Secrets and variables → Acti
 
 | Secret | Value | Get via |
 |---|---|---|
-| `SSH_PRIVATE_KEY` | Deploy SSH private key | `cat /root/.ssh/github-actions` on server |
+| `SSH_PRIVATE_KEY_B64` | Base64 deploy key | `base64 -w 0 /root/.ssh/github-actions` on server |
 | `SSH_HOST` | `91.107.186.95` | — |
 | `SSH_USER` | `root` | — |
-
-`SSH_KNOWN_HOSTS` is optional — the workflow runs `ssh-keyscan` on the GitHub runner.
 
 ### 1. Generate deploy key on the server (already done)
 
@@ -20,13 +18,13 @@ ssh-keygen -t ed25519 -f /root/.ssh/github-actions -N "" -C "github-actions@aihd
 cat /root/.ssh/github-actions.pub >> /root/.ssh/authorized_keys
 ```
 
-### 2. Copy the private key into GitHub Secrets
+### 2. Store the deploy key in GitHub Secrets (base64)
 
 ```bash
-ssh root@91.107.186.95 "cat /root/.ssh/github-actions"
+ssh root@91.107.186.95 "base64 -w 0 /root/.ssh/github-actions" | gh secret set SSH_PRIVATE_KEY_B64 -R owner/AIHD-LAB
+gh secret set SSH_HOST -R owner/AIHD-LAB -b "91.107.186.95"
+gh secret set SSH_USER -R owner/AIHD-LAB -b "root"
 ```
-
-Copy the **entire output** (from `-----BEGIN OPENSSH PRIVATE KEY-----` to `-----END OPENSSH PRIVATE KEY-----`) into the `SSH_PRIVATE_KEY` secret.
 
 ## Pipeline behavior
 
