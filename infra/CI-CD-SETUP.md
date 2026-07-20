@@ -7,9 +7,10 @@ Add these **Repository Secrets** in `Settings → Secrets and variables → Acti
 | Secret | Value | Get via |
 |---|---|---|
 | `SSH_PRIVATE_KEY` | Deploy SSH private key | `cat /root/.ssh/github-actions` on server |
-| `SSH_KNOWN_HOSTS` | Host key fingerprint | `ssh-keyscan -H 91.107.186.95` |
 | `SSH_HOST` | `91.107.186.95` | — |
 | `SSH_USER` | `root` | — |
+
+`SSH_KNOWN_HOSTS` is optional — the workflow runs `ssh-keyscan` on the GitHub runner.
 
 ### 1. Generate deploy key on the server (already done)
 
@@ -26,14 +27,6 @@ ssh root@91.107.186.95 "cat /root/.ssh/github-actions"
 ```
 
 Copy the **entire output** (from `-----BEGIN OPENSSH PRIVATE KEY-----` to `-----END OPENSSH PRIVATE KEY-----`) into the `SSH_PRIVATE_KEY` secret.
-
-### 3. Copy the host key into GitHub Secrets
-
-```bash
-ssh-keyscan -H 91.107.186.95
-```
-
-Copy the output into `SSH_KNOWN_HOSTS`.
 
 ## Pipeline behavior
 
