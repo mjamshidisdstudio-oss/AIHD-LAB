@@ -93,7 +93,6 @@ jobs:
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
-          if_key_missing: fail
 
       - name: Test SSH connection
         run: |
