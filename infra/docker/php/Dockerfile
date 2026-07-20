@@ -98,10 +98,13 @@ RUN rm -f /etc/nginx/sites-enabled/default \
 COPY infra/docker/nginx/default.conf /etc/nginx/nginx.conf
 COPY infra/docker/nginx/php-fpm.conf /etc/nginx/conf.d/php-fpm.conf
 COPY infra/docker/supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY infra/docker/php/entrypoint.sh /usr/local/bin/entrypoint.sh
+
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/up || exit 1
 
-CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
