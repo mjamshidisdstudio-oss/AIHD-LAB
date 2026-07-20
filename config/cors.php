@@ -25,7 +25,7 @@ return [
 
     'allowed_origins' => array_filter(explode(',', env(
         'CORS_ALLOWED_ORIGINS',
-        'http://127.0.0.1:3100,http://127.0.0.1:3200,http://localhost:3100,http://localhost:3200'
+        'http://127.0.0.1:3100,http://127.0.0.1:3200,http://localhost:3100,http://localhost:3200,https://app.revivoto.ai,https://admin.revivoto.ai'
     ))),
 
     'allowed_origins_patterns' => [],

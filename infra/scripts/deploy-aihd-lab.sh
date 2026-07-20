@@ -22,7 +22,7 @@ git reset --hard origin/main
 find infra/ -name '*.sh' -o -name '*.conf' | xargs -I{} sed -i 's/\r$//' {} 2>/dev/null || true
 
 echo "=== 2. Build Docker images ==="
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build app marketplace 2>&1
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" build app marketplace admin 2>&1
 
 echo "=== 3. Start stateful services (if not running) ==="
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d mysql redis 2>&1
@@ -56,7 +56,7 @@ for i in $(seq 1 15); do
 done
 
 echo "=== 6. Start app containers ==="
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d app marketplace 2>&1
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d app marketplace admin 2>&1
 
 echo "=== 7. Wait for app health ==="
 for i in $(seq 1 30); do
@@ -77,6 +77,9 @@ done
 echo "=== 8. Run migrations ==="
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T app php artisan migrate --force 2>&1
 
+echo "=== 8b. Ensure admin user ==="
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T app php artisan db:seed --class=AdminUserSeeder --force 2>&1
+
 echo "=== 9. Fix storage permissions ==="
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -u 0 app \
     chown -R www-data:www-data /var/www/html/storage 2>&1
@@ -88,7 +91,11 @@ echo "Backend health: $HEALTH_CODE"
 MARKET_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/ || echo "failed")
 echo "Marketplace health: $MARKET_CODE"
 
+ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3200/ || echo "failed")
+echo "Admin health: $ADMIN_CODE"
+
 echo ""
 echo "=== Deploy complete ==="
 echo "Backend:  http://localhost:8080 → https://api.revivoto.ai"
 echo "Frontend: http://localhost:3100 → https://app.revivoto.ai"
+echo "Admin:    http://localhost:3200 → https://admin.revivoto.ai"

@@ -133,10 +133,15 @@ jobs:
             https://app.revivoto.ai/ || echo "failed")
           echo "app.revivoto.ai: $APP_CODE"
 
-          if [ "$API_CODE" = "200" ] && [ "$APP_CODE" = "200" ]; then
+          ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://admin.revivoto.ai/ || echo "failed")
+          echo "admin.revivoto.ai: $ADMIN_CODE"
+
+          if [ "$API_CODE" = "200" ] && [ "$APP_CODE" = "200" ] && [ "$ADMIN_CODE" = "200" ]; then
             echo "✅ Deployment verified successfully"
           else
             echo "⚠️  Some endpoints returned unexpected status codes"
             echo "   api.revivoto.ai: $API_CODE (expected 200)"
             echo "   app.revivoto.ai: $APP_CODE (expected 200)"
+            echo "   admin.revivoto.ai: $ADMIN_CODE (expected 200)"
           fi

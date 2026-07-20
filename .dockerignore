@@ -23,3 +23,7 @@ marketplace/
 marketplace/node_modules
 marketplace/.output
 marketplace/.nuxt
+admin/
+admin/node_modules
+admin/.output
+admin/.nuxt

@@ -24,7 +24,8 @@ NUXT_PUBLIC_API_BASE=http://localhost/api npm run dev -- --port 3200
 
 Unlike the marketplace client, there is no core-identity bearer token to fall
 back on: sign in at `/login` with a seeded admin account (locally,
-`admin@aihd.lab` / `password` — see `database/seeders/DatabaseSeeder.php`).
+`admin@aihd.lab` / `password` — see `database/seeders/AdminUserSeeder.php`).
+Production: https://admin.revivoto.ai/login
 The token comes from `POST /api/admin/login` (Sanctum personal access token)
 and is stored in `localStorage`.
 

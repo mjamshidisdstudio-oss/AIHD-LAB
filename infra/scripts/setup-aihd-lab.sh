@@ -18,7 +18,7 @@ fi
 docker compose -p aihd-lab -f docker-compose.yml pull mysql redis
 
 # Build app images
-docker compose -p aihd-lab -f docker-compose.yml build app marketplace
+docker compose -p aihd-lab -f docker-compose.yml build app marketplace admin
 
 # Start stateful services
 docker compose -p aihd-lab -f docker-compose.yml up -d mysql redis
@@ -57,7 +57,7 @@ else
 fi
 
 # Start app containers
-docker compose -p aihd-lab -f docker-compose.yml up -d app marketplace
+docker compose -p aihd-lab -f docker-compose.yml up -d app marketplace admin
 
 # Fix storage permissions
 docker compose -p aihd-lab exec -u 0 app chown -R www-data:www-data /var/www/html/storage
@@ -65,6 +65,7 @@ docker compose -p aihd-lab exec -u 0 app chown -R www-data:www-data /var/www/htm
 echo "=== Deploy complete ==="
 echo "Backend:  http://127.0.0.1:8080"
 echo "Frontend: http://127.0.0.1:3100"
+echo "Admin:    http://127.0.0.1:3200"
 echo ""
 echo "Check health:"
 echo "  curl -f http://127.0.0.1:8080/up"
