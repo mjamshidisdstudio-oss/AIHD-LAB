@@ -134,8 +134,8 @@ jobs:
           echo "app.revivoto.ai: $APP_CODE"
 
           ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://admin.revivoto.ai/ || echo "failed")
-          echo "admin.revivoto.ai: $ADMIN_CODE"
+            https://admin.revivoto.ai/login || echo "failed")
+          echo "admin.revivoto.ai/login: $ADMIN_CODE"
 
           if [ "$API_CODE" = "200" ] && [ "$APP_CODE" = "200" ] && [ "$ADMIN_CODE" = "200" ]; then
             echo "✅ Deployment verified successfully"

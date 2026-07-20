@@ -91,11 +91,19 @@ echo "Backend health: $HEALTH_CODE"
 MARKET_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/ || echo "failed")
 echo "Marketplace health: $MARKET_CODE"
 
-ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3200/ || echo "failed")
+ADMIN_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3200/login || echo "failed")
 echo "Admin health: $ADMIN_CODE"
+
+# Sync host nginx when this script runs on the production server
+if [ -f infra/nginx/aihd-lab-https.conf ] && [ -d /etc/nginx/sites-available ]; then
+    echo "=== 11. Update host nginx ==="
+    cp infra/nginx/aihd-lab-https.conf /etc/nginx/sites-available/revivoto.ai
+    cp infra/nginx/aihd-lab-https.conf /etc/nginx/sites-enabled/revivoto.ai
+    nginx -t && systemctl reload nginx
+fi
 
 echo ""
 echo "=== Deploy complete ==="
 echo "Backend:  http://localhost:8080 → https://api.revivoto.ai"
 echo "Frontend: http://localhost:3100 → https://app.revivoto.ai"
-echo "Admin:    http://localhost:3200 → https://admin.revivoto.ai"
+echo "Admin:    http://localhost:3200 → https://admin.revivoto.ai/login"
