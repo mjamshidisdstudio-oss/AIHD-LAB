@@ -63,13 +63,13 @@ docker compose -p aihd-lab -f docker-compose.yml up -d app marketplace
 docker compose -p aihd-lab exec -u 0 app chown -R www-data:www-data /var/www/html/storage
 
 echo "=== Deploy complete ==="
-echo "Backend:  http://127.0.0.1:8000"
-echo "Frontend: http://127.0.0.1:3000"
+echo "Backend:  http://127.0.0.1:8080"
+echo "Frontend: http://127.0.0.1:3100"
 echo ""
 echo "Check health:"
-echo "  curl -f http://127.0.0.1:8000/up"
+echo "  curl -f http://127.0.0.1:8080/up"
 echo ""
 echo "Remaining steps:"
-echo "  1. Setup nginx site config (see infra/nginx/aihd-lab-site.conf)"
+echo "  1. Setup nginx site config (see infra/nginx/aihd-lab-https.conf)"
 echo "  2. Obtain SSL cert with certbot"
 echo "  3. Configure DNS A record"

@@ -1,0 +1,147 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DEPLOY_DIR: /opt/aihd-lab
+  COMPOSE_PROJECT: aihd-lab
+  COMPOSE_FILE: docker-compose.yml
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Validate: run PHPUnit tests (reuses the same
+  # matrix and MySQL 8 service as tests.yml).
+  # ──────────────────────────────────────────────
+  test:
+    name: PHPUnit (${{ matrix.php }})
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: aihd_lab_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    strategy:
+      fail-fast: true
+      matrix:
+        php: [8.2, 8.3, 8.4]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: dom, curl, libxml, mbstring, zip, pcntl, bcmath, pdo, mysql, pdo_mysql
+          coverage: none
+
+      - name: Install Composer dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Copy environment file
+        run: cp .env.example .env
+
+      - name: Generate app key
+        run: php artisan key:generate
+
+      - name: Execute tests
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USERNAME: root
+          DB_PASSWORD: root
+        run: vendor/bin/phpunit
+
+  # ──────────────────────────────────────────────
+  # Deploy to production (showroom-germany).
+  # Runs only after all test jobs pass.
+  # ──────────────────────────────────────────────
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: >
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+      || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
+          if_key_missing: warn
+
+      - name: Test SSH connection
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "echo 'SSH connection OK' && hostname"
+
+      - name: Sync code to server
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude 'vendor' \
+            --exclude '.env' \
+            --exclude 'storage/framework' \
+            --exclude 'storage/logs' \
+            --exclude 'storage/app/media' \
+            --exclude 'storage/app/private' \
+            --exclude 'marketplace/node_modules' \
+            --exclude 'marketplace/.output' \
+            --exclude 'marketplace/.nuxt' \
+            --exclude 'docker-volumes' \
+            -e "ssh -o StrictHostKeyChecking=accept-new" \
+            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_DIR }}/
+
+      - name: Execute deploy script
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd ${{ env.DEPLOY_DIR }} && \
+             bash infra/scripts/deploy-aihd-lab.sh"
+
+      - name: Verify deployment
+        run: |
+          echo "=== Verifying deployment ==="
+          API_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://api.revivoto.ai/ || echo "failed")
+          echo "api.revivoto.ai: $API_CODE"
+
+          APP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            https://app.revivoto.ai/ || echo "failed")
+          echo "app.revivoto.ai: $APP_CODE"
+
+          if [ "$API_CODE" = "200" ] && [ "$APP_CODE" = "200" ]; then
+            echo "✅ Deployment verified successfully"
+          else
+            echo "⚠️  Some endpoints returned unexpected status codes"
+            echo "   api.revivoto.ai: $API_CODE (expected 200)"
+            echo "   app.revivoto.ai: $APP_CODE (expected 200)"
+          fi
