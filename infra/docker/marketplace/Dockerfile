@@ -2,10 +2,10 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-COPY marketplace/package.json marketplace/package-lock.json ./
+COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY marketplace/ .
+COPY . .
 RUN npm run build
 
 FROM node:20-slim

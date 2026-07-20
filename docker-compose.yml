@@ -94,8 +94,8 @@ services:
 
   marketplace:
     build:
-      context: .
-      dockerfile: infra/docker/marketplace/Dockerfile
+      context: ./marketplace
+      dockerfile: ../infra/docker/marketplace/Dockerfile
     container_name: aihd-marketplace
     restart: unless-stopped
     environment:
