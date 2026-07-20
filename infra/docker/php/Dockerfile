@@ -40,10 +40,6 @@ FROM base AS app
 COPY --chown=www-data:www-data . .
 
 RUN composer install --no-interaction --no-dev --optimize-autoloader \
-    && php artisan config:cache \
-    && php artisan route:cache \
-    && php artisan view:cache \
-    && php artisan storage:link \
     && mkdir -p storage/framework/cache/data \
         storage/framework/sessions \
         storage/framework/views \
