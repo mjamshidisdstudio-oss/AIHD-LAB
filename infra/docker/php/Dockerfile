@@ -1,15 +1,8 @@
-FROM php:8.2-fpm-bookworm AS base
+FROM php:8.2-fpm-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libfreetype6-dev \
-    libonig-dev \
-    libxml2-dev \
-    unzip \
-    curl \
-    git \
+    nginx supervisor curl unzip git \
+    libzip-dev libpng-dev libjpeg-dev libfreetype6-dev libonig-dev libxml2-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         bcmath ctype exif fileinfo gd mbstring mysqli \
@@ -22,8 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
-
-FROM base AS app
 
 COPY --chown=www-data:www-data . .
 
@@ -38,34 +29,12 @@ RUN composer install --no-interaction --no-dev --optimize-autoloader \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
-FROM node:20-slim AS frontend
-
-WORKDIR /app
-COPY --from=app /var/www/html /app
+# Build frontend assets
 RUN npm install && npm run build && rm -rf node_modules
 
-FROM php:8.2-fpm-bookworm AS final
-
-# Install only runtime deps (no build deps) + nginx + supervisor
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    nginx \
-    supervisor \
-    curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy PHP + extensions from base (already compiled, no rebuild needed)
-COPY --from=base /usr/local /usr/local
-COPY --from=base /usr/lib/php /usr/lib/php
-COPY --from=base /etc/php /etc/php
-
-WORKDIR /var/www/html
-
-COPY --from=frontend --chown=www-data:www-data /app .
-
+# Nginx config
 RUN rm -f /etc/nginx/sites-enabled/default \
-    && mkdir -p /var/log/nginx /var/run/php \
-    && chown -R www-data:www-data /var/log/nginx /var/run/php
+    && mkdir -p /var/log/nginx /var/run/php
 
 COPY infra/docker/nginx/default.conf /etc/nginx/nginx.conf
 COPY infra/docker/nginx/php-fpm.conf /etc/nginx/conf.d/php-fpm.conf
