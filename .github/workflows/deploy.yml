@@ -87,6 +87,9 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
       || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
 
+    env:
+      SSH_OPTS: -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=40
+
     steps:
       - name: Setup SSH agent
         env:
@@ -106,15 +109,16 @@ jobs:
 
       - name: Test SSH connection
         run: |
-          ssh -o StrictHostKeyChecking=yes \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "echo 'SSH OK — $(hostname)'"
 
       - name: Run deploy script on server
         run: |
-          ssh -o StrictHostKeyChecking=yes \
+          ssh $SSH_OPTS \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
             "cd /opt/aihd-lab && \
+             git fetch origin && git reset --hard origin/main && \
              sed -i 's/\r$//' infra/scripts/deploy-aihd-lab.sh && \
              bash infra/scripts/deploy-aihd-lab.sh"
 

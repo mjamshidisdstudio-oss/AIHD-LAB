@@ -61,6 +61,7 @@ docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d app marketplace 2>
 echo "=== 7. Wait for app health ==="
 for i in $(seq 1 30); do
     STATUS=$(docker inspect --format='{{.State.Health.Status}}' aihd-app 2>/dev/null || echo "starting")
+    echo "  health check $i/30: $STATUS"
     if [ "$STATUS" = "healthy" ]; then
         echo "App is healthy!"
         break
