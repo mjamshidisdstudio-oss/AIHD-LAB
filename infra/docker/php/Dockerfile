@@ -28,13 +28,16 @@ WORKDIR /var/www/html
 
 # Composer deps
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --no-dev --optimize-autoloader
+RUN composer install --no-interaction --no-dev --optimize-autoloader --no-scripts
 
 # App source
 COPY --chown=www-data:www-data . .
 
 # Vite build output
 COPY --from=frontend /app/public/build /var/www/html/public/build
+
+# Run Laravel post-install scripts (artisan is now available)
+RUN php artisan package:discover --ansi
 
 # Storage dirs
 RUN mkdir -p storage/framework/cache/data \
