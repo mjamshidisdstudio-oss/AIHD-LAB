@@ -1,5 +1,15 @@
-FROM php:8.2-fpm-bookworm
+FROM node:20-slim AS frontend
 
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+COPY resources/ resources/
+COPY vite.config.js .
+RUN npm run build
+
+FROM php:8.2-fpm-bookworm AS backend
+
+# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx supervisor curl unzip git \
     libzip-dev libpng-dev libjpeg-dev libfreetype6-dev libonig-dev libxml2-dev \
@@ -16,10 +26,18 @@ COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
+# Composer deps
+COPY composer.json composer.lock ./
+RUN composer install --no-interaction --no-dev --optimize-autoloader
+
+# App source
 COPY --chown=www-data:www-data . .
 
-RUN composer install --no-interaction --no-dev --optimize-autoloader \
-    && mkdir -p storage/framework/cache/data \
+# Vite build output
+COPY --from=frontend /app/public/build /var/www/html/public/build
+
+# Storage dirs
+RUN mkdir -p storage/framework/cache/data \
         storage/framework/sessions \
         storage/framework/views \
         storage/logs \
@@ -29,10 +47,7 @@ RUN composer install --no-interaction --no-dev --optimize-autoloader \
     && chown -R www-data:www-data storage bootstrap/cache \
     && chmod -R 775 storage bootstrap/cache
 
-# Build frontend assets
-RUN npm install && npm run build && rm -rf node_modules
-
-# Nginx config
+# Nginx + supervisor
 RUN rm -f /etc/nginx/sites-enabled/default \
     && mkdir -p /var/log/nginx /var/run/php
 
