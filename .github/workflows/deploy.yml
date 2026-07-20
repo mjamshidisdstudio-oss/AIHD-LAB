@@ -1,30 +1,29 @@
-name: Deploy
+name: CI/CD
 
 on:
   push:
     branches:
       - main
       - master
+      - '*.x'
+  pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'
 
 permissions:
   contents: read
 
-env:
-  DEPLOY_DIR: /opt/aihd-lab
-  COMPOSE_PROJECT: aihd-lab
-  COMPOSE_FILE: docker-compose.yml
-
 jobs:
-  # ──────────────────────────────────────────────
-  # Validate: run PHPUnit tests (reuses the same
-  # matrix and MySQL 8 service as tests.yml).
-  # ──────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────
+  # Test — PHPUnit matrix (PHP 8.2, 8.3, 8.4) × MySQL 8
+  # ─────────────────────────────────────────────────────
   test:
     name: PHPUnit (${{ matrix.php }})
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
 
+    # The schema relies on MySQL 8 features (generated columns, CHECK
+    # constraints, composite foreign keys, ENUM columns).
     services:
       mysql:
         image: mysql:8.0
@@ -72,62 +71,45 @@ jobs:
           DB_PASSWORD: root
         run: vendor/bin/phpunit
 
-  # ──────────────────────────────────────────────
-  # Deploy to production (showroom-germany).
-  # Runs only after all test jobs pass.
-  # ──────────────────────────────────────────────
+  # ─────────────────────────────────────────────────────
+  # Deploy to production (showroom-germany)
+  # Runs after ALL test jobs pass — push to main only.
+  # ─────────────────────────────────────────────────────
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
     needs: [test]
+    timeout-minutes: 45
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     if: >
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
-      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: ${{ secrets.SSH_KNOWN_HOSTS }}
-          if_key_missing: warn
+          if_key_missing: fail
 
       - name: Test SSH connection
         run: |
           ssh -o StrictHostKeyChecking=accept-new \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "echo 'SSH connection OK' && hostname"
+            "echo 'SSH OK — $(hostname)'"
 
-      - name: Sync code to server
-        run: |
-          rsync -az --delete \
-            --exclude '.git' \
-            --exclude '.github' \
-            --exclude 'node_modules' \
-            --exclude 'vendor' \
-            --exclude '.env' \
-            --exclude 'storage/framework' \
-            --exclude 'storage/logs' \
-            --exclude 'storage/app/media' \
-            --exclude 'storage/app/private' \
-            --exclude 'marketplace/node_modules' \
-            --exclude 'marketplace/.output' \
-            --exclude 'marketplace/.nuxt' \
-            --exclude 'docker-volumes' \
-            -e "ssh -o StrictHostKeyChecking=accept-new" \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ env.DEPLOY_DIR }}/
-
-      - name: Execute deploy script
+      - name: Run deploy script on server
         run: |
           ssh -o StrictHostKeyChecking=accept-new \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd ${{ env.DEPLOY_DIR }} && \
+            "cd /opt/aihd-lab && \
+             sed -i 's/\r$//' infra/scripts/deploy-aihd-lab.sh && \
              bash infra/scripts/deploy-aihd-lab.sh"
 
-      - name: Verify deployment
+      - name: Verify endpoints
         run: |
           echo "=== Verifying deployment ==="
           API_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
