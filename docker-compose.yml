@@ -72,6 +72,10 @@ services:
       LOG_CHANNEL: stack
       LOG_STACK: single
       LOG_LEVEL: ${LOG_LEVEL:-warning}
+      LOG_VIEWER_ENABLED: ${LOG_VIEWER_ENABLED:-true}
+      # Launch mode until the core identity/coin service is reachable in prod.
+      LAB_AUTH_MODE: ${LAB_AUTH_MODE:-anonymous}
+      LAB_BILLING_ENABLED: ${LAB_BILLING_ENABLED:-false}
       CORE_BASE_URL: ${CORE_BASE_URL:-http://app/dev/core}
       CORE_SERVICE_CREDENTIAL: ${CORE_SERVICE_CREDENTIAL:-dev-service-credential}
       CORE_STUB_DEV_TOKEN: ${CORE_STUB_DEV_TOKEN:-dev-token}
@@ -101,6 +105,7 @@ services:
     restart: unless-stopped
     environment:
       NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-https://api.revivoto.ai/api}
+      NUXT_PUBLIC_AUTH_MODE: ${NUXT_PUBLIC_AUTH_MODE:-anonymous}
       NUXT_PUBLIC_DEV_TOKEN: ${NUXT_PUBLIC_DEV_TOKEN:-dev-token}
       NUXT_PUBLIC_PUSHER_APP_KEY: ""
       NUXT_PUBLIC_PUSHER_HOST: ""

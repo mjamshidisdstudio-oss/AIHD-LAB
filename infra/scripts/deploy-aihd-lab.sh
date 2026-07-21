@@ -14,6 +14,27 @@ COMPOSE_FILE="docker-compose.yml"
 
 cd "$DEPLOY_DIR"
 
+# Ensure launch-mode flags are set on the host .env used by docker compose.
+ensure_launch_mode_env() {
+    local env_file="${DEPLOY_DIR}/.env"
+    touch "$env_file"
+    for kv in \
+        "LAB_AUTH_MODE=anonymous" \
+        "LAB_BILLING_ENABLED=false" \
+        "NUXT_PUBLIC_AUTH_MODE=anonymous" \
+        "LOG_VIEWER_ENABLED=true"
+    do
+        key="${kv%%=*}"
+        if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+            sed -i "s|^${key}=.*|${kv}|" "$env_file"
+        else
+            echo "$kv" >> "$env_file"
+        fi
+    done
+}
+
+ensure_launch_mode_env
+
 echo "=== 1. Pull latest code ==="
 git fetch origin
 git reset --hard origin/main
@@ -56,7 +77,7 @@ for i in $(seq 1 15); do
 done
 
 echo "=== 6. Start app containers ==="
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d app marketplace admin 2>&1
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" up -d --force-recreate app marketplace admin 2>&1
 
 echo "=== 7. Wait for app health ==="
 for i in $(seq 1 30); do
@@ -77,6 +98,9 @@ done
 echo "=== 8. Run migrations ==="
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T app php artisan migrate --force 2>&1
 
+echo "=== 8a. Publish Log Viewer assets ==="
+docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T app php artisan log-viewer:publish 2>&1 || true
+
 echo "=== 8b. Ensure admin user ==="
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -T app php artisan db:seed --class=AdminUserSeeder --force 2>&1
 
@@ -87,6 +111,14 @@ docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" exec -u 0 app \
 echo "=== 10. Verify health ==="
 HEALTH_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/ || echo "failed")
 echo "Backend health: $HEALTH_CODE"
+
+SERVICES_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api/marketplace/services || echo "failed")
+echo "Marketplace services API: $SERVICES_CODE"
+if [ "$SERVICES_CODE" != "200" ]; then
+    echo "ERROR: /api/marketplace/services returned $SERVICES_CODE (expected 200)"
+    docker logs aihd-app --tail 30 2>&1 || true
+    exit 1
+fi
 
 MARKET_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3100/ || echo "failed")
 echo "Marketplace health: $MARKET_CODE"

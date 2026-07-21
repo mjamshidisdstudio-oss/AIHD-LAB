@@ -14,6 +14,11 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     init() {
       if (this.token) return
+      const config = useRuntimeConfig()
+      if (config.public.authMode === 'anonymous') {
+        // Identity is the signed aihd_anon_id cookie (see AnonymousAuth).
+        return
+      }
       if (import.meta.client) {
         const route = useRoute()
         const fromQuery = route.query.token

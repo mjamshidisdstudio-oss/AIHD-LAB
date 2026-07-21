@@ -29,6 +29,8 @@ export default defineNuxtConfig({
       // stub.dev_token). A real deployment supplies a token from the core
       // team's own auth flow instead of this fallback.
       devToken: process.env.NUXT_PUBLIC_DEV_TOKEN || 'dev-token',
+      // 'anonymous' = cookie identity (Phase L2 launch mode); 'core' = bearer.
+      authMode: process.env.NUXT_PUBLIC_AUTH_MODE || 'core',
       broadcastKey: process.env.NUXT_PUBLIC_PUSHER_APP_KEY || '',
       broadcastHost: process.env.NUXT_PUBLIC_PUSHER_HOST || '',
       broadcastPort: process.env.NUXT_PUBLIC_PUSHER_PORT || '443',

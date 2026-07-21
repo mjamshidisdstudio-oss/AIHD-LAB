@@ -37,7 +37,8 @@ COPY --chown=www-data:www-data . .
 COPY --from=frontend /app/public/build /var/www/html/public/build
 
 # Run Laravel post-install scripts (artisan is now available)
-RUN php artisan package:discover --ansi
+RUN php artisan package:discover --ansi \
+    && php artisan log-viewer:publish
 
 # Storage dirs
 RUN mkdir -p storage/framework/cache/data \

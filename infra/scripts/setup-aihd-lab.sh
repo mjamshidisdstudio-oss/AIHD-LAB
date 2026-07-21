@@ -12,6 +12,9 @@ if [ ! -f .env ]; then
     echo "APP_ENV=production" >> .env
     echo "APP_DEBUG=false" >> .env
     echo "LOG_LEVEL=warning" >> .env
+    echo "LAB_AUTH_MODE=anonymous" >> .env
+    echo "LAB_BILLING_ENABLED=false" >> .env
+    echo "LOG_VIEWER_ENABLED=true" >> .env
 fi
 
 # Pull base images

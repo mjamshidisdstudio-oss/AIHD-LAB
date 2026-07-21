@@ -27,6 +27,8 @@ class AppServiceProvider extends ServiceProvider
         // Authorization for the catalog admin API.
         Gate::define('manage-catalog', fn (User $user) => $user->isAdmin());
 
+        Gate::define('viewLogViewer', fn (?User $user): bool => $user?->is_admin === true);
+
         // The opaque core-identity user_ref attached by AuthenticateWithCoreToken.
         Request::macro('userRef', function (): ?string {
             /** @var Request $this */
