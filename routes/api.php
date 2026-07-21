@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\CommentController as AdminCommentController;
 use App\Http\Controllers\Admin\OrderController as AdminOrderController;
 use App\Http\Controllers\Admin\PreviewOrderController as AdminPreviewOrderController;
 use App\Http\Controllers\Admin\ResultDownloadController as AdminResultDownloadController;
+use App\Http\Controllers\Admin\SystemLogController;
 use App\Http\Controllers\Admin\WebhookDeliveryController as AdminWebhookDeliveryController;
 use App\Http\Controllers\Marketplace\BookmarkController;
 use App\Http\Controllers\Marketplace\BroadcastAuthController;
@@ -111,6 +112,8 @@ Route::middleware(['auth:sanctum', 'can:manage-catalog'])
     ->name('admin.')
     ->group(function () {
         Route::post('logout', [AdminAuthController::class, 'logout'])->name('logout');
+
+        Route::get('logs/system', [SystemLogController::class, 'index'])->name('logs.system');
 
         Route::apiResource('services', ServiceController::class)
             ->only(['index', 'store', 'show', 'update']);
