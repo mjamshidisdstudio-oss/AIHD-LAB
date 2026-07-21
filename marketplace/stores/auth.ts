@@ -34,7 +34,6 @@ export const useAuthStore = defineStore('auth', {
         }
       }
 
-      const config = useRuntimeConfig()
       this.setToken(config.public.devToken)
     },
     setToken(token: string) {
